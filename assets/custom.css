@@ -1,0 +1,696 @@
+/* DashDock Example App Styles */
+
+/* Ensure full viewport height for dock containers */
+body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+}
+
+/* AppShell layout fixes */
+.mantine-AppShell-main {
+    min-height: calc(100vh - 60px);
+}
+
+/* Ensure DashDock containers have proper stacking context */
+.dash-dock-container {
+    height: 100% !important;
+    width: 100% !important;
+    position: relative;
+    z-index: 1;
+}
+
+/* Fix DashDock within Paper components */
+.mantine-Paper-root > div[style*="height"] {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Ensure FlexLayout renders above content but below modals */
+.flexlayout__layout {
+    z-index: 10;
+}
+
+/* Fix floating tabs z-index to appear above content */
+.flexlayout__floating_window {
+    z-index: 1000;
+}
+
+/* Ensure popout button and toolbar stay visible */
+.flexlayout__tab_toolbar {
+    z-index: 15;
+}
+
+/* Smooth theme transitions */
+.flexlayout__layout,
+.flexlayout__tab,
+.flexlayout__tabset,
+.flexlayout__border,
+.flexlayout__splitter {
+    transition: background-color 0.2s ease,
+                color 0.2s ease,
+                border-color 0.2s ease;
+}
+
+/* Dark mode adjustments for code blocks */
+[data-mantine-color-scheme="dark"] pre {
+    background-color: var(--mantine-color-dark-6) !important;
+}
+
+/* Dark mode terminal styling */
+[data-mantine-color-scheme="dark"] .terminal-pre {
+    background-color: #0d1117 !important;
+}
+
+/* Navigation link hover effects */
+.mantine-Anchor-root:hover {
+    text-decoration: none;
+}
+
+/* Card hover effect for navigation */
+.mantine-Paper-root[style*="cursor: pointer"]:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--mantine-shadow-md);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* FlexLayout tab strip improvements */
+.flexlayout__tabset_tabbar_outer {
+    border-bottom: 1px solid var(--mantine-color-gray-3);
+}
+
+[data-mantine-color-scheme="dark"] .flexlayout__tabset_tabbar_outer {
+    border-bottom-color: var(--mantine-color-dark-4);
+}
+
+/* Improved splitter visibility */
+.flexlayout__splitter:hover {
+    background-color: var(--mantine-color-blue-5) !important;
+}
+
+/* Tab button styling */
+.flexlayout__tab_button {
+    font-family: inherit;
+}
+
+/* Maximize button visibility */
+.flexlayout__tab_toolbar_button {
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.flexlayout__tab_toolbar_button:hover {
+    opacity: 1;
+}
+
+/* Border panel styling */
+.flexlayout__border_inner {
+    border: none !important;
+}
+
+/* Scrollbar styling for dark mode */
+[data-mantine-color-scheme="dark"] ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+[data-mantine-color-scheme="dark"] ::-webkit-scrollbar-track {
+    background: var(--mantine-color-dark-6);
+}
+
+[data-mantine-color-scheme="dark"] ::-webkit-scrollbar-thumb {
+    background: var(--mantine-color-dark-4);
+    border-radius: 4px;
+}
+
+[data-mantine-color-scheme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: var(--mantine-color-dark-3);
+}
+
+/* ============================================================================
+   APPLE LIQUID GLASS THEME FOR DASHDOCK
+   WWDC 2025 Glassmorphism Design Language
+   ============================================================================ */
+
+/* ============================================================================
+   LIQUID GLASS LIGHT THEME
+   ============================================================================ */
+
+.dash-dock-liquid-glass-light {
+  /* Glass effect CSS variables */
+  --dashdock-glass-bg: rgba(255, 255, 255, 0.65);
+  --dashdock-glass-bg-header: rgba(255, 255, 255, 0.75);
+  --dashdock-glass-bg-tab: rgba(255, 255, 255, 0.5);
+  --dashdock-glass-bg-tab-active: rgba(255, 255, 255, 0.85);
+  --dashdock-glass-bg-tab-hover: rgba(255, 255, 255, 0.7);
+  --dashdock-glass-border: rgba(0, 0, 0, 0.08);
+  --dashdock-glass-border-strong: rgba(0, 0, 0, 0.12);
+  --dashdock-glass-text: rgba(0, 0, 0, 0.85);
+  --dashdock-glass-text-muted: rgba(0, 0, 0, 0.6);
+  --dashdock-glass-text-active: rgba(0, 0, 0, 0.95);
+  --dashdock-glass-splitter: rgba(0, 0, 0, 0.06);
+  --dashdock-glass-splitter-hover: rgba(34, 139, 230, 0.4);
+  --dashdock-glass-splitter-active: rgba(34, 139, 230, 0.6);
+  --dashdock-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --dashdock-glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --dashdock-glass-blur: blur(16px) saturate(150%);
+}
+
+/* Light Glass - Container */
+.dash-dock-liquid-glass-light.dash-dock-container {
+  background: var(--dashdock-glass-bg);
+  backdrop-filter: var(--dashdock-glass-blur);
+  -webkit-backdrop-filter: var(--dashdock-glass-blur);
+  border: 1px solid var(--dashdock-glass-border);
+  border-radius: 16px;
+  box-shadow:
+    var(--dashdock-glass-shadow),
+    var(--dashdock-glass-inner-glow),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+/* Light Glass - FlexLayout Overrides */
+.dash-dock-liquid-glass-light .flexlayout__layout {
+  --color-text: var(--dashdock-glass-text);
+  --color-background: transparent;
+  --color-base: transparent;
+  --color-1: var(--dashdock-glass-border);
+  --color-2: var(--dashdock-glass-bg-tab);
+  --color-3: var(--dashdock-glass-bg-tab-active);
+  --color-4: var(--dashdock-glass-bg-tab-hover);
+  --color-5: var(--dashdock-glass-text-muted);
+  --color-6: var(--dashdock-glass-text-active);
+  --color-splitter: var(--dashdock-glass-splitter);
+  --color-splitter-hover: var(--dashdock-glass-splitter-hover);
+  --border-radius-tabset: 12px;
+  --border-radius-tabset-tab: 8px;
+}
+
+/* Light Glass - Tabset */
+.dash-dock-liquid-glass-light .flexlayout__tabset {
+  background: var(--dashdock-glass-bg);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--dashdock-glass-border);
+  border-radius: 12px;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Light Glass - Tab Header Strip */
+.dash-dock-liquid-glass-light .flexlayout__tabset_header {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.6) 100%
+  );
+  border-bottom: 1px solid var(--dashdock-glass-border);
+  padding: 6px 8px 0 8px;
+}
+
+.dash-dock-liquid-glass-light .flexlayout__tabset_tabbar_outer {
+  border-bottom: none;
+}
+
+/* Light Glass - Tab Buttons */
+.dash-dock-liquid-glass-light .flexlayout__tab_button {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0.2) 100%
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px 8px 0 0;
+  color: var(--dashdock-glass-text-muted);
+  font-weight: 500;
+  margin: 0 2px;
+  padding: 6px 14px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.dash-dock-liquid-glass-light .flexlayout__tab_button:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
+  border-color: rgba(0, 0, 0, 0.1);
+  color: var(--dashdock-glass-text);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dash-dock-liquid-glass-light .flexlayout__tab_button--selected {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.75) 100%
+  );
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--dashdock-glass-text-active);
+  font-weight: 600;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+}
+
+/* Light Glass - Tab Content Area */
+.dash-dock-liquid-glass-light .flexlayout__tab {
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 0 0 10px 10px;
+}
+
+/* Light Glass - Splitters */
+.dash-dock-liquid-glass-light .flexlayout__splitter {
+  background: var(--dashdock-glass-splitter);
+  border-radius: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dash-dock-liquid-glass-light .flexlayout__splitter:hover {
+  background: var(--dashdock-glass-splitter-hover);
+  box-shadow: 0 0 12px rgba(34, 139, 230, 0.3);
+}
+
+.dash-dock-liquid-glass-light .flexlayout__splitter:active,
+.dash-dock-liquid-glass-light .flexlayout__splitter_drag {
+  background: var(--dashdock-glass-splitter-active);
+  box-shadow: 0 0 16px rgba(34, 139, 230, 0.4);
+}
+
+/* Light Glass - Borders */
+.dash-dock-liquid-glass-light .flexlayout__border {
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: var(--dashdock-glass-border);
+}
+
+.dash-dock-liquid-glass-light .flexlayout__border_button {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0.2) 100%
+  );
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+  color: var(--dashdock-glass-text-muted);
+  transition: all 0.2s ease;
+}
+
+.dash-dock-liquid-glass-light .flexlayout__border_button:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--dashdock-glass-text);
+}
+
+.dash-dock-liquid-glass-light .flexlayout__border_button--selected {
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--dashdock-glass-text-active);
+  font-weight: 600;
+}
+
+/* Light Glass - Toolbar Buttons */
+.dash-dock-liquid-glass-light .flexlayout__tab_toolbar_button {
+  color: var(--dashdock-glass-text-muted);
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.dash-dock-liquid-glass-light .flexlayout__tab_toolbar_button:hover {
+  color: var(--dashdock-glass-text);
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+/* Light Glass - Floating Windows */
+.dash-dock-liquid-glass-light .flexlayout__floating_window {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* ============================================================================
+   LIQUID GLASS DARK THEME
+   ============================================================================ */
+
+.dash-dock-liquid-glass-dark {
+  /* Glass effect CSS variables - Dark variant */
+  --dashdock-glass-bg: rgba(30, 30, 35, 0.65);
+  --dashdock-glass-bg-header: rgba(25, 25, 30, 0.8);
+  --dashdock-glass-bg-tab: rgba(255, 255, 255, 0.08);
+  --dashdock-glass-bg-tab-active: rgba(255, 255, 255, 0.15);
+  --dashdock-glass-bg-tab-hover: rgba(255, 255, 255, 0.12);
+  --dashdock-glass-border: rgba(255, 255, 255, 0.1);
+  --dashdock-glass-border-strong: rgba(255, 255, 255, 0.15);
+  --dashdock-glass-text: rgba(255, 255, 255, 0.9);
+  --dashdock-glass-text-muted: rgba(255, 255, 255, 0.6);
+  --dashdock-glass-text-active: rgba(255, 255, 255, 0.98);
+  --dashdock-glass-splitter: rgba(255, 255, 255, 0.08);
+  --dashdock-glass-splitter-hover: rgba(79, 195, 247, 0.4);
+  --dashdock-glass-splitter-active: rgba(79, 195, 247, 0.6);
+  --dashdock-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --dashdock-glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --dashdock-glass-blur: blur(16px) saturate(180%);
+}
+
+/* Dark Glass - Container */
+.dash-dock-liquid-glass-dark.dash-dock-container {
+  background: var(--dashdock-glass-bg);
+  backdrop-filter: var(--dashdock-glass-blur);
+  -webkit-backdrop-filter: var(--dashdock-glass-blur);
+  border: 1px solid var(--dashdock-glass-border);
+  border-radius: 16px;
+  box-shadow:
+    var(--dashdock-glass-shadow),
+    var(--dashdock-glass-inner-glow),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+/* Dark Glass - FlexLayout Overrides */
+.dash-dock-liquid-glass-dark .flexlayout__layout {
+  --color-text: var(--dashdock-glass-text);
+  --color-background: transparent;
+  --color-base: transparent;
+  --color-1: var(--dashdock-glass-border);
+  --color-2: var(--dashdock-glass-bg-tab);
+  --color-3: var(--dashdock-glass-bg-tab-active);
+  --color-4: var(--dashdock-glass-bg-tab-hover);
+  --color-5: var(--dashdock-glass-text-muted);
+  --color-6: var(--dashdock-glass-text-active);
+  --color-splitter: var(--dashdock-glass-splitter);
+  --color-splitter-hover: var(--dashdock-glass-splitter-hover);
+  --border-radius-tabset: 12px;
+  --border-radius-tabset-tab: 8px;
+}
+
+/* Dark Glass - Tabset */
+.dash-dock-liquid-glass-dark .flexlayout__tabset {
+  background: rgba(20, 20, 25, 0.6);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid var(--dashdock-glass-border);
+  border-radius: 12px;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Dark Glass - Tab Header Strip */
+.dash-dock-liquid-glass-dark .flexlayout__tabset_header {
+  background: linear-gradient(
+    180deg,
+    rgba(40, 40, 50, 0.8) 0%,
+    rgba(30, 30, 40, 0.6) 100%
+  );
+  border-bottom: 1px solid var(--dashdock-glass-border);
+  padding: 6px 8px 0 8px;
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__tabset_tabbar_outer {
+  border-bottom: none;
+}
+
+/* Dark Glass - Tab Buttons */
+.dash-dock-liquid-glass-dark .flexlayout__tab_button {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px 8px 0 0;
+  color: var(--dashdock-glass-text-muted);
+  font-weight: 500;
+  margin: 0 2px;
+  padding: 6px 14px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__tab_button:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--dashdock-glass-text);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__tab_button--selected {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--dashdock-glass-text-active);
+  font-weight: 600;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Dark Glass - Tab Content Area */
+.dash-dock-liquid-glass-dark .flexlayout__tab {
+  background: rgba(20, 20, 25, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 0 0 10px 10px;
+}
+
+/* Dark Glass - Splitters */
+.dash-dock-liquid-glass-dark .flexlayout__splitter {
+  background: var(--dashdock-glass-splitter);
+  border-radius: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__splitter:hover {
+  background: var(--dashdock-glass-splitter-hover);
+  box-shadow: 0 0 12px rgba(79, 195, 247, 0.3);
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__splitter:active,
+.dash-dock-liquid-glass-dark .flexlayout__splitter_drag {
+  background: var(--dashdock-glass-splitter-active);
+  box-shadow: 0 0 16px rgba(79, 195, 247, 0.4);
+}
+
+/* Dark Glass - Borders */
+.dash-dock-liquid-glass-dark .flexlayout__border {
+  background: rgba(20, 20, 25, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: var(--dashdock-glass-border);
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__border_button {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: var(--dashdock-glass-text-muted);
+  transition: all 0.2s ease;
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__border_button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--dashdock-glass-text);
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__border_button--selected {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--dashdock-glass-text-active);
+  font-weight: 600;
+}
+
+/* Dark Glass - Toolbar Buttons */
+.dash-dock-liquid-glass-dark .flexlayout__tab_toolbar_button {
+  color: var(--dashdock-glass-text-muted);
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.dash-dock-liquid-glass-dark .flexlayout__tab_toolbar_button:hover {
+  color: var(--dashdock-glass-text);
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+/* Dark Glass - Floating Windows */
+.dash-dock-liquid-glass-dark .flexlayout__floating_window {
+  background: rgba(25, 25, 30, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================================================
+   LIQUID GLASS ANIMATIONS & EFFECTS
+   ============================================================================ */
+
+/* Specular Highlight Effect */
+.dash-dock-liquid-glass-light .flexlayout__tabset::before,
+.dash-dock-liquid-glass-dark .flexlayout__tabset::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  border-radius: 12px 12px 0 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Subtle shimmer animation on hover */
+@keyframes glassShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.dash-dock-liquid-glass-light .flexlayout__tabset:hover::after,
+.dash-dock-liquid-glass-dark .flexlayout__tabset:hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: glassShimmer 3s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: 12px;
+  z-index: 0;
+}
+
+/* ============================================================================
+   ACCESSIBILITY ENHANCEMENTS FOR LIQUID GLASS
+   ============================================================================ */
+
+/* High contrast mode - increase visibility */
+@media (prefers-contrast: high) {
+  .dash-dock-liquid-glass-light.dash-dock-container,
+  .dash-dock-liquid-glass-dark.dash-dock-container {
+    backdrop-filter: blur(8px) saturate(100%);
+    -webkit-backdrop-filter: blur(8px) saturate(100%);
+  }
+
+  .dash-dock-liquid-glass-light.dash-dock-container {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.3);
+  }
+
+  .dash-dock-liquid-glass-dark.dash-dock-container {
+    background: rgba(30, 30, 35, 0.9);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .dash-dock-liquid-glass-light .flexlayout__tab_button,
+  .dash-dock-liquid-glass-dark .flexlayout__tab_button {
+    border-width: 2px;
+  }
+
+  .dash-dock-liquid-glass-light .flexlayout__splitter,
+  .dash-dock-liquid-glass-dark .flexlayout__splitter {
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .dash-dock-liquid-glass-dark .flexlayout__splitter {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Reduced motion - disable animations */
+@media (prefers-reduced-motion: reduce) {
+  .dash-dock-liquid-glass-light *,
+  .dash-dock-liquid-glass-dark * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .dash-dock-liquid-glass-light .flexlayout__tabset::after,
+  .dash-dock-liquid-glass-dark .flexlayout__tabset::after {
+    display: none;
+  }
+}
+
+/* Focus states for keyboard navigation */
+.dash-dock-liquid-glass-light .flexlayout__tab_button:focus-visible,
+.dash-dock-liquid-glass-dark .flexlayout__tab_button:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-6);
+  outline-offset: 2px;
+}
+
+.dash-dock-liquid-glass-light .flexlayout__border_button:focus-visible,
+.dash-dock-liquid-glass-dark .flexlayout__border_button:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-6);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .dash-dock-liquid-glass-light.dash-dock-container,
+  .dash-dock-liquid-glass-dark.dash-dock-container {
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    border-radius: 12px;
+  }
+
+  .dash-dock-liquid-glass-light .flexlayout__tab_button,
+  .dash-dock-liquid-glass-dark .flexlayout__tab_button {
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+}
+
+/* ============================================================================
+   END APPLE LIQUID GLASS THEME
+   ============================================================================ */
