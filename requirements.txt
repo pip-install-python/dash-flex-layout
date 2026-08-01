@@ -29,18 +29,26 @@ dash-mantine-components>=2.7.0
 dash-iconify>=0.1.2
 
 # Markdown-driven docs engine (directives: toc / exec / source / kwargs).
-# NOT LISTED HERE ON PURPOSE — network standard, same as the boilerplate:
-# markdown2dash 0.1.2 declares `gunicorn<22`, which fights the CVE-driven
-# gunicorn>=23 floor below. It is installed as a second command with its
-# dependency graph skipped (its real deps — dash, dmc, pydantic — are all
-# named in this file anyway):
+# markdown2dash itself is NOT LISTED HERE ON PURPOSE — network standard, same
+# as the boilerplate: 0.1.2 declares `gunicorn<22`, which fights the
+# CVE-driven gunicorn>=23 floor below, so it is installed as a second command
+# with its dependency graph skipped:
 #
 #     pip install -r requirements.txt
 #     pip install --no-deps markdown2dash==0.1.2
 #
-# The Dockerfile and CI both run this two-command install; the fingerprint
+# Skipping the graph means naming its REAL runtime deps here instead: dash,
+# dash-iconify and dash-mantine-components are pinned above; mistune (the
+# markdown parser), docutils and jsonpath are below. Omitting mistune is not
+# hypothetical — the first flexlayout.2plot.dev deploy crash-looped on
+# `ModuleNotFoundError: No module named 'mistune'` (2026-08-01) because a
+# developer venv that once installed markdown2dash normally hides the gap.
+# The Dockerfile and CI both run the two-command install; CI's fingerprint
 # checks assert the dodge kept working (gunicorn >= 23 AND markdown2dash
 # importable).
+docutils!=0.21
+jsonpath
+mistune
 python-frontmatter>=1.0.0
 pydantic>=2.3.0
 
