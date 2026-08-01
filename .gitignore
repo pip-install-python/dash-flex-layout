@@ -332,3 +332,14 @@ credentials/
 *.zip
 *.rar
 *.7z
+
+# scripts/compat_matrix.py scratch: per-version venvs + raw smoke-test JSON
+.compat/
+smoke-*.json
+
+# 2plot satellite analytics ledger + reporter lease
+# (lib/analytics_tracker.py, lib/satellite_reporter.py). Runtime state, written
+# beside run.py at the repo root; never belongs in the repo.
+visitor_analytics.json
+visitor_analytics.json.lock
+.satellite_report.lease

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ReactDOM from "react-dom";
 import * as CaplinFlexLayout from "flexlayout-react";
-import { IJsonModel, TabNode, Layout, Model, ITabRenderValues } from "flexlayout-react";
+import { IJsonModel, TabNode, Layout, Model, ITabRenderValues, Actions, DockLocation } from "flexlayout-react";
 import { renderDashComponent } from "dash-extensions-js";
 
 // Import FlexLayout styles and our custom theme styles
@@ -83,6 +83,27 @@ type Props = {
   debugMode?: boolean;
 
   /**
+   * Imperative FlexLayout action applied to the LIVE model in place — works in both
+   * useStateForModel modes and never re-mounts sibling tabs (unlike replacing `model`,
+   * which is ignored when useStateForModel=true and re-mounts every tab otherwise).
+   *
+   * Shape: {type, nonce, ...args}. `nonce` must change for the action to fire
+   * (guard against re-renders re-applying it). Supported types:
+   * - addNode: {json, toNodeId, location?: 'top'|'bottom'|'left'|'right'|'center', index?, select?}
+   *   If json.id already exists in the model, the tab is selected instead of re-added.
+   * - deleteTab: {tabNodeId}
+   * - selectTab: {tabNodeId}
+   * - renameTab: {tabNodeId, text}
+   * - updateNodeAttributes: {nodeId, attributes}
+   * - adjustWeights: {nodeId, weights}
+   */
+  modelAction?: {
+    type: string;
+    nonce: number;
+    [key: string]: any;
+  };
+
+  /**
    * Current color scheme, automatically detected from Mantine theme
    * If not specified, will try to auto-detect from HTML data-mantine-color-scheme
    */
@@ -161,6 +182,7 @@ const DashFlexLayout = ({
   style,
   loading_state,
   debugMode = false,
+  modelAction,
   ...restProps
 }: Props) => {
   // Track current color scheme
@@ -184,6 +206,15 @@ const DashFlexLayout = ({
   // Store children in ref for stable access
   const childrenRef = useRef<React.ReactNode>(children);
   childrenRef.current = children;
+
+  // JSON of the model currently reflected by the live `currentModel`. FlexLayout fires
+  // onModelChange (→ setProps) on EVERY internal change (tab select, splitter drag, …); that
+  // round-trips back through the `model` prop. Recreating the Model from that echo would make
+  // `<Layout>` re-run the factory and RE-MOUNT every tab's content (in Dash terms, every portaled
+  // child) for a change FlexLayout already applied. We track what's applied so the model effect
+  // can SKIP those echoes (and any redundant identical update) and only recreate the Model for a
+  // genuinely new, Dash-originated model — eliminating the re-mount storm.
+  const appliedModelJsonRef = useRef<string | null>(null);
 
   // Listen to Mantine theme changes
   useEffect(() => {
@@ -219,16 +250,77 @@ const DashFlexLayout = ({
 
   // Handle model updates
   useEffect(() => {
-    const baseModel = setProps && !useStateForModel
-      ? Model.fromJson(model)
-      : modelState;
-    setCurrentModel(baseModel);
+    if (setProps && !useStateForModel) {
+      const json = JSON.stringify(model);
+      // Skip echoes of FlexLayout's own internal changes (and redundant identical updates):
+      // the live Model already reflects them, so recreating it would needlessly re-mount every
+      // tab's content. Only a genuinely new (Dash-originated) model recreates the Model.
+      if (json === appliedModelJsonRef.current) return;
+      appliedModelJsonRef.current = json;
+      setCurrentModel(Model.fromJson(model));
+    } else {
+      setCurrentModel(modelState);
+    }
   }, [model, modelState, setProps, useStateForModel]);
+
+  // Apply imperative modelAction to the live Model (no re-mounts). Nonce-guarded so
+  // re-renders with the same action object don't re-fire it.
+  const lastActionNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!modelAction || !currentModel) return;
+    if (modelAction.nonce === lastActionNonceRef.current) return;
+    lastActionNonceRef.current = modelAction.nonce;
+    try {
+      let action: any = null;
+      switch (modelAction.type) {
+        case 'addNode': {
+          const json = modelAction.json;
+          // Re-adding an existing tab id would throw — select it instead.
+          if (json?.id && currentModel.getNodeById(json.id)) {
+            action = Actions.selectTab(json.id);
+          } else {
+            action = Actions.addNode(
+              json,
+              modelAction.toNodeId,
+              DockLocation.getByName(modelAction.location || 'bottom'),
+              modelAction.index ?? -1,
+              modelAction.select ?? true
+            );
+          }
+          break;
+        }
+        case 'deleteTab':
+          action = Actions.deleteTab(modelAction.tabNodeId);
+          break;
+        case 'selectTab':
+          action = Actions.selectTab(modelAction.tabNodeId);
+          break;
+        case 'renameTab':
+          action = Actions.renameTab(modelAction.tabNodeId, modelAction.text);
+          break;
+        case 'updateNodeAttributes':
+          action = Actions.updateNodeAttributes(modelAction.nodeId, modelAction.attributes);
+          break;
+        case 'adjustWeights':
+          action = Actions.adjustWeights(modelAction.nodeId, modelAction.weights);
+          break;
+        default:
+          if (debugMode) console.warn(`DashFlexLayout: unknown modelAction type "${modelAction.type}"`);
+      }
+      if (action) currentModel.doAction(action);
+    } catch (e) {
+      if (debugMode) console.error('DashFlexLayout: modelAction failed', modelAction, e);
+    }
+  }, [modelAction, currentModel, debugMode]);
 
   // Model change handler
   const onModelChange = useCallback((updatedModel: Model) => {
     if (setProps && !useStateForModel) {
-      setProps({ model: updatedModel.toJson() });
+      const json = updatedModel.toJson();
+      // FlexLayout has ALREADY applied this change to its live model; record it as the applied
+      // baseline so the effect above skips the prop echo instead of re-mounting the tab content.
+      appliedModelJsonRef.current = JSON.stringify(json);
+      setProps({ model: json });
     } else {
       setModelState(updatedModel);
     }

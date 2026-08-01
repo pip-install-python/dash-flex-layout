@@ -1,0 +1,407 @@
+name: CI
+
+# Deliberately NOT `push: branches: [main]`. cd.yml runs on that push and its
+# first job `uses:` this workflow, so a push to main would start two runs of
+# it — which then contend for the `ci-${{ github.ref }}` concurrency group
+# below and cancel each other. The work still gets done (whichever run
+# survives does all of it), but every push leaves a `cancelled` CI run sitting
+# next to the green CD one, which reads as a failure at a glance.
+#
+# So: pull requests get their own CI, and `main` is owned by CD. There is no
+# coverage gap — CD cannot deploy without this workflow passing first.
+# (Tag-driven PyPI publishing lives in release.yml and is independent of both.)
+on:
+  pull_request:
+  workflow_dispatch:
+  # Called by cd.yml so a deploy can never ship something the matrix rejected.
+  workflow_call:
+
+# Read-only. Nothing in this workflow publishes, comments or tags; the deploy
+# lives in cd.yml behind a `production` environment, the PyPI publish in
+# release.yml behind the `pypi` environment.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FORCE_COLOR: "1"
+  # Never let a CI run inherit production behaviour: the base-URL guard keys
+  # off RENDER / APP_ENV, and the satellite reporter keys off the webhook
+  # secret. Both must stay inert here.
+  APP_ENV: ci
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The workflows lint themselves. This is not belt-and-braces: an invalid
+      # workflow file is the one defect CI structurally cannot report, because
+      # the run dies before a job exists to fail. A double-quoted string in a
+      # ${{ }} expression silently killed every CI and CD run on the
+      # boilerplate for four days — nothing to click, nothing in the API but
+      # `conclusion: failure` with zero jobs. actionlint catches it in a
+      # second, and (this is the point) a pull request that reintroduces it
+      # gets a red check with the offending column underlined.
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
+  site-tests:
+    name: docs site · pytest + battery (zero secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the site (two-command install)
+        # markdown2dash 0.1.2 declares gunicorn<22 against the CVE-driven
+        # gunicorn>=23 floor. Same two commands as the Dockerfile and
+        # scripts/compat_matrix.py.
+        run: |
+          pip install -r requirements.txt
+          pip install --no-deps markdown2dash==0.1.2
+          pip install -r tests/requirements.txt
+
+      - name: Confirm the pinned dependency versions
+        run: |
+          python - <<'PY'
+          import dash, dash_improve_my_llms as pkg, gunicorn
+
+          def parts(v):
+              return tuple(int(x) for x in v.split(".")[:3] if x.isdigit())
+
+          assert parts(dash.__version__)[:2] >= (4, 2), dash.__version__
+          # 2.3.4 is the network standard: below it `resolve_site_title` does
+          # not exist and this site's published identity degrades to app.title.
+          assert parts(pkg.__version__) >= (2, 3, 4), pkg.__version__
+          # 21.x carried two request-smuggling CVEs (CVE-2024-6827,
+          # CVE-2024-1135). markdown2dash's spurious <22 pin must not win.
+          assert parts(gunicorn.__version__)[:2] >= (23, 0), gunicorn.__version__
+          import markdown2dash  # noqa: F401 — --no-deps must not skip the package
+          print(f"dash {dash.__version__}, dash-improve-my-llms "
+                f"{pkg.__version__}, gunicorn {gunicorn.__version__}")
+          PY
+
+      # No CROSS_APP_WEBHOOK_SECRET here ON PURPOSE. tests/conftest.py pins the
+      # secrets empty; the dormant-without-keys behaviour is only provable when
+      # nothing is configured.
+      - name: Test suite (zero secrets)
+        run: pytest tests -q
+
+      - name: Boot under a production server + battery
+        run: |
+          gunicorn run:server -b 127.0.0.1:8055 --daemon --access-logfile - --error-logfile -
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8055/healthz && break
+            sleep 1
+          done
+          # A page that renders under the test client can still fail under a
+          # real WSGI worker — different import path, different working
+          # directory, no test-client conveniences.
+          curl -sf http://127.0.0.1:8055/ > /dev/null
+          curl -sf http://127.0.0.1:8055/basic > /dev/null
+          # The battery, against the same server a satellite deploys.
+          python3 scripts/network_smoke.py --base-url http://127.0.0.1:8055
+
+  docs:
+    name: Docs · Dash ${{ matrix.dash }} · Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor, the two intermediate minors, and the current release.
+        dash: ["4.1.0", "4.2.0", "4.3.0", "4.4.1"]
+        python: ["3.12"]
+        include:
+          # The docs-site Python range, against the current Dash. A full
+          # cross-product would be 12 jobs for very little extra signal.
+          - dash: "4.4.1"
+            python: "3.10"
+          - dash: "4.4.1"
+            python: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      # node is what makes the clientside-JS syntax check real. Without it the
+      # smoke test SKIPS that check rather than failing, so a broken
+      # clientside_callback (the theme toggle, the navbar collapse, the
+      # pageview beacon) would sail through.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Dash ${{ matrix.dash }} first
+        # Install the version under test BEFORE the rest, so the other
+        # requirements resolve against it rather than dragging in a newer Dash.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "dash==${{ matrix.dash }}"
+
+      - name: Install documentation-site requirements
+        # The pinned Dash line is stripped so it cannot override the matrix
+        # version. Same rule as scripts/compat_matrix.py, and the same
+        # two-command markdown2dash install as the Dockerfile.
+        run: |
+          grep -v 'COMPAT-MATRIX: dash' requirements.txt > /tmp/reqs.txt
+          python -m pip install -r /tmp/reqs.txt
+          python -m pip install --no-deps markdown2dash==0.1.2
+
+      - name: Report the resolved Dash version
+        # A silent upgrade here would make the whole matrix meaningless.
+        run: |
+          RESOLVED=$(python -c "import dash; print(dash.__version__)")
+          echo "requested=${{ matrix.dash }} resolved=$RESOLVED"
+          if [ "$RESOLVED" != "${{ matrix.dash }}" ]; then
+            echo "::warning::Dash resolved to $RESOLVED, not ${{ matrix.dash }}"
+          fi
+
+      - name: Smoke test
+        run: python scripts/smoke_test.py --json smoke-${{ matrix.dash }}-py${{ matrix.python }}.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.dash }}-py${{ matrix.python }}
+          path: smoke-*.json
+          if-no-files-found: ignore
+
+  docker:
+    name: docker image · boot · battery
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [site-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same build Render runs. This is where a dependency-resolution
+      # failure surfaces — at CI time, not deploy time, where the only signal
+      # is a dashboard log while the old image keeps serving.
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: flexlayout-docs:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # pip metadata is invisible from outside a running host, so the versions
+      # are asserted here, inside the artifact that actually ships.
+      - name: Version fingerprints inside the image
+        run: |
+          docker run --rm flexlayout-docs:ci python -c "
+          from importlib.metadata import version
+
+          def parts(v):
+              return tuple(int(x) for x in v.split('.')[:3] if x.isdigit())
+
+          v = version('dash')
+          print('dash', v)
+          assert parts(v)[:2] >= (4, 2), f'expected dash >=4.2, image has {v}'
+
+          v = version('dash-improve-my-llms')
+          print('dash-improve-my-llms', v)
+          assert parts(v) >= (2, 3, 4), f'expected >=2.3.4 (resolve_site_title), image has {v}'
+
+          # markdown2dash installs with --no-deps to dodge its gunicorn<22
+          # pin; this assert is what proves the dodge kept working. 21.x
+          # carried two request-smuggling CVEs (CVE-2024-6827, CVE-2024-1135).
+          v = version('gunicorn')
+          print('gunicorn', v)
+          assert parts(v)[:2] >= (23, 0), f'expected gunicorn>=23, image has {v}'
+
+          # ...and that skipping its dependency graph did not skip the package.
+          import markdown2dash  # noqa: F401
+          print('markdown2dash importable')
+          "
+
+      # Boot with no secrets: the reporter stays dormant, ads render empty.
+      # What this catches is any import-time or preload crash — the class of
+      # failure where the platform loops the worker and the deploy never goes
+      # live.
+      - name: Boot the container and wait for /healthz
+        run: |
+          docker run -d --name docs -p 8055:8055 flexlayout-docs:ci
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8055/healthz > /dev/null; then
+              echo "healthy after ~$((i*2))s"
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' docs)" != "true" ]; then
+              echo "container exited during boot:"
+              docker logs docs
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "never became healthy; last logs:"
+          docker logs --tail 100 docs
+          exit 1
+
+      # The SAME script CD runs against https://flexlayout.2plot.dev, so a
+      # failure in CI and a failure in production read identically.
+      - name: Smoke battery against the booted container
+        run: python3 scripts/network_smoke.py --base-url http://127.0.0.1:8055
+
+      - name: Container logs (for the record)
+        if: always()
+        run: docker logs --tail 40 docs 2>/dev/null || true
+
+  package:
+    name: Build + verify the wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # check_release.py compares the git commit times of the bundle and
+          # src/lib. A shallow clone can omit the commit that last touched one
+          # of them, which turns the check into a false "no git history" skip.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Release consistency
+        # Version drift across pyproject.toml / package.json / package-info.json
+        # / the docs constants, a stale bundle, a broken hand-maintained
+        # __init__.py, packaging leaks. None of these break a test run, which is
+        # why they get their own gate.
+        run: python scripts/check_release.py
+
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: Check metadata
+        run: python -m twine check dist/*
+
+      - name: Install the wheel in a clean venv and import it
+        # The package must work with ONLY its declared dependencies — nothing
+        # from the documentation requirements. pyproject declares dash and
+        # typing_extensions, so `pip install dist/*.whl` alone must suffice;
+        # installing dash explicitly here would mask a missing declaration.
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install --upgrade pip
+          /tmp/clean/bin/pip install dist/*.whl
+          /tmp/clean/bin/python - <<'PY'
+          import pathlib
+
+          import flexlayout_dash as dfl
+
+          print("version:", dfl.__version__)
+
+          pkg = pathlib.Path(dfl.__file__).parent
+          bundle = pkg / "flexlayout_dash.min.js"
+          assert bundle.exists(), "JS bundle missing from the wheel"
+          print("bundle:", bundle.stat().st_size // 1024, "KB")
+
+          for name in ("DashFlexLayout", "Tab"):
+              assert hasattr(dfl, name), f"missing component: {name}"
+
+          # Every _js_dist entry must point at a file that actually shipped;
+          # otherwise Dash 404s at runtime, in the browser only.
+          for d in dfl.DashFlexLayout._js_dist:
+              rel = d["relative_package_path"]
+              assert (pkg / rel).exists(), f"_js_dist references missing file: {rel}"
+          print("components + _js_dist OK")
+          PY
+
+      - name: Assert the wheel version matches pyproject.toml
+        run: |
+          PY_VER=$(python -c "import re;print(re.search(r'^version = \"([^\"]+)\"', open('pyproject.toml').read(), re.M).group(1))")
+          WHEEL_VER=$(/tmp/clean/bin/python -c "import flexlayout_dash;print(flexlayout_dash.__version__)")
+          echo "pyproject=$PY_VER  installed=$WHEEL_VER"
+          test "$PY_VER" = "$WHEEL_VER"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  package-python-range:
+    name: Package · Python ${{ matrix.python }}
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every interpreter the package claims to run on. This installs ONLY
+        # the wheel plus Dash, never the documentation requirements, because
+        # the package's floor is not the docs site's.
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install the wheel and NOTHING else
+        # Not even Dash is named here: pyproject must pull it in. If the wheel
+        # secretly needs DMC or the docs template, this job is where it fails
+        # and the only job where it fails.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+
+      - name: Import and build a dock layout
+        run: |
+          python - <<'PY'
+          import dash, flexlayout_dash as dfl
+          from dash import Dash, html
+          from dash._utils import to_json
+
+          model = {
+              "global": {"tabEnableClose": False, "tabEnableFloat": True},
+              "borders": [{"type": "border", "location": "left", "children": [
+                  {"type": "tab", "name": "Files", "id": "border-tab"}]}],
+              "layout": {"type": "row", "weight": 100, "children": [
+                  {"type": "tabset", "weight": 50, "children": [
+                      {"type": "tab", "name": "One", "id": "tab-1"}]},
+                  {"type": "tabset", "weight": 50, "children": [
+                      {"type": "tab", "name": "Two", "id": "tab-2"}]},
+              ]},
+          }
+
+          app = Dash(__name__)
+          app.layout = html.Div([
+              dfl.DashFlexLayout(
+                  id="dock", model=model, useStateForModel=True,
+                  supportsPopout=True, colorScheme="dark",
+                  style={"height": "500px"},
+                  children=[
+                      dfl.Tab(id="tab-1", children=html.P("one")),
+                      dfl.Tab(id="tab-2", children=html.P("two")),
+                      dfl.Tab(id="border-tab", children=html.P("files")),
+                  ],
+              ),
+          ])
+          to_json(app.layout)
+          print(f"dash={dash.__version__} flexlayout_dash={dfl.__version__} OK")
+          PY

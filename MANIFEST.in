@@ -1,11 +1,88 @@
-include dash_flex_layout/dash_flex_layout.min.js
-include dash_flex_layout/dash_flex_layout.min.js.map
-include dash_flex_layout/async-*.js
-include dash_flex_layout/async-*.js.map
-include dash_flex_layout/*-shared.js
-include dash_flex_layout/*-shared.js.map
-include dash_flex_layout/metadata.json
-include dash_flex_layout/package-info.json
+# What ships to PyPI. An ALLOWLIST, deliberately.
+#
+# This repository holds a component AND a documentation site. Only the
+# component ships. A denylist ("recursive-exclude documentation *") has to be
+# updated every time the repo grows a directory, and the failure is silent:
+# the first release after someone adds a folder ships it.
+#
+# See .subdomains/PACKAGING.md in dash-hook-my-ai.
+
 include README.md
+include CHANGELOG.md
 include LICENSE
-include package.json
+include pyproject.toml
+
+# The package itself.
+recursive-include flexlayout_dash *.py
+include flexlayout_dash/flexlayout_dash.min.js
+include flexlayout_dash/flexlayout_dash.min.js.map
+include flexlayout_dash/flexlayout_dash.min.js.LICENSE.txt
+include flexlayout_dash/package-info.json
+
+# Async chunks, if the bundle is ever code-split. None exist today
+# (async_resources is empty in __init__.py); harmless when they do not match.
+include flexlayout_dash/async-*.js
+include flexlayout_dash/async-*.js.map
+include flexlayout_dash/*-shared.js
+include flexlayout_dash/*-shared.js.map
+
+# Build artifacts that are NOT needed at runtime. react-docgen metadata is
+# ~1 MB here and is read by dash-generate-components at build time only.
+# `exclude` must win over the `recursive-include flexlayout_dash *.py` above —
+# it does not match .json, but the explicit exclude documents the intent and
+# guards against a future broadening of that line.
+exclude flexlayout_dash/metadata.json
+exclude flexlayout_dash/proptypes.js
+
+# NOT shipped, and each for a specific reason.
+#
+# The documentation site now lives at the REPO ROOT (docs/, pages/, lib/,
+# components/, assets/, templates/, run.py, requirements.txt) rather than in a
+# documentation/ subdirectory, so every one of those needs pruning by name.
+# That makes this list load-bearing in a way it was not before: a single missed
+# entry ships the deployment's config to PyPI, and the build stays green.
+#
+#   run.py                the docs site's entry point.
+#   docs/ pages/ lib/     the docs site: markdown, the page loader, the
+#   components/ assets/   deployment's network clients, app shell, static
+#   templates/            assets.
+#   requirements.txt      the DOCUMENTATION SITE's dependencies (gunicorn, DMC,
+#                         the markdown engine). The package's live in
+#                         pyproject.toml and are a different, much smaller set.
+#   scripts/              release + compat tooling for this repo.
+#   src/                  the TypeScript sources the bundle is built from.
+#   tests/                setuptools adds this by DEFAULT, on top of this
+#                         allowlist — it appeared in a 1.2.0 sdist despite
+#                         never being included here. `prune` is what removes it.
+#   render.yaml           someone else's deployment.
+#   Dockerfile
+#   github_assets/        README images.
+#   DEPLOYMENT.md         about OUR deployment; means nothing to an installer.
+#   COMPATIBILITY.md      generated CI evidence, not package documentation.
+#   package.json          the npm/build manifest. pyproject.toml is
+#                         authoritative for the version, and
+#                         flexlayout_dash/package-info.json is what
+#                         __version__ reads at runtime.
+#
+# If a doc is ever genuinely about a PACKAGE FEATURE, allowlist it BY NAME.
+# Never add a recursive include: the next doc about our own deployment would
+# ship silently.
+
+prune docs
+prune pages
+prune lib
+prune components
+prune assets
+prune templates
+prune scripts
+prune src
+prune tests
+prune github_assets
+exclude run.py
+exclude requirements.txt
+exclude render.yaml
+exclude Dockerfile
+exclude DEPLOYMENT.md
+exclude COMPATIBILITY.md
+
+global-exclude __pycache__ *.py[co] .DS_Store .git*

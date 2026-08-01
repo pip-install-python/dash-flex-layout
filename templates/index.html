@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- =====================================================================
+         flexlayout-dash docs — Dash index template (2plot network standard).
+
+         MINIMAL ON PURPOSE, and the rule for what belongs here is exact:
+         THIS FILE DECLARES ONLY WHAT DASH OMITS.
+
+         `dash.register_page()` makes Dash generate `description`, `og:type`,
+         `og:title`, `og:description`, `og:image` and the full `twitter:*` set
+         per page (dash/_pages.py), and dash-improve-my-llms 2.3.4's prerender
+         owns the canonical link and per-page <title> on the CRAWLER path.
+         Anything re-declared here would ship doubled — and the static copy
+         describes the SITE where Dash's describes the PAGE, so the duplicate
+         is both redundant and the less accurate of the two.
+
+         WHY THE FILE EXISTS AT ALL (it was deleted once, 2026-07-31, on the
+         theory that the prerender covers OG): the prerender path is taken by
+         crawlers on the package's bot list — which has `facebookbot` (Meta's
+         AI training crawler), NOT `facebookexternalhit` (the link-preview
+         fetcher). Social scrapers take the browser path, and on that path
+         only this file supplies the auxiliary card tags, the manifest and the
+         icons. Deleting it silently kills the install surface and degrades
+         every unfurl. tests/test_social_card.py pins all of this.
+         ================================================================== -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{%title%}</title>
+
+    <meta name="keywords" content="Python Dash, flexlayout, dockable panels, resizable layout, IDE layout, drag and drop tabs, Plotly Dash, Dash components, FlexLayout-React">
+    <meta name="author" content="Pip Install Python LLC">
+
+    <!-- og:url and og:site_name are genuinely absent from Dash's set. og:url
+         is static, so it says "/" on every page; the prerender serves the
+         accurate per-page canonical to crawlers. -->
+    <meta property="og:url" content="https://flexlayout.2plot.dev/">
+    <meta property="og:site_name" content="flexlayout-dash — resizable panel layouts for Dash">
+
+    <!-- The social card auxiliaries. og:image itself is Dash's (per page,
+         image_url= at register_page); these describe the file. The card lives
+         on the CDN — never /assets/ — because scrapers fetch it at unfurl
+         time and a cold free-tier container times out, poisoning the preview
+         cache. Width/height MUST match the real file: lib/constants.py is the
+         source, tests/test_social_card.py pins the agreement, and
+         scripts/smoke_live.py checks the CDN object's actual pixels. -->
+    <meta property="og:image:secure_url" content="https://cdn.2plot.ai/github_assets/flexlayout.2plot.dev.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="flexlayout-dash — resizable panel layouts for Dash">
+    <meta name="twitter:image:alt" content="flexlayout-dash — resizable panel layouts for Dash">
+
+    <!-- The installable-app surface. iOS ignores the manifest and uses the
+         apple-touch-icon; everything else reads assets/favicon/site.webmanifest.
+         Keep theme-color in step with the manifest's theme_color. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/assets/favicon/site.webmanifest">
+    <meta name="theme-color" content="#4c6ef5">
+
+    {%metas%}
+    {%favicon%}
+    {%css%}
+</head>
+
+<body>
+    {%app_entry%}
+    <footer>
+        {%config%}
+        {%scripts%}
+        {%renderer%}
+    </footer>
+</body>
+
+</html>

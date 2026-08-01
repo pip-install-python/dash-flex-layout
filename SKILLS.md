@@ -36,7 +36,7 @@ pip install flexlayout-dash
 ```python
 import dash
 from dash import html
-import dash_flex_layout as dfl
+import flexlayout_dash as dfl
 import dash_mantine_components as dmc
 
 app = dash.Dash(__name__, external_stylesheets=[dmc.styles.ALL])
@@ -607,6 +607,15 @@ html.Div([
 ### Issue: Choppy resizing
 
 **Solution:** Keep `realtimeResize=False` (default) for smoother performance.
+
+### Issue: Tab content resets or flashes on tab switch / splitter drag
+
+**Solution:** Fixed in `flexlayout-dash>=1.1.0`. With `useStateForModel=False`, FlexLayout's own
+internal changes used to round-trip through the `model` prop and recreate the layout model,
+re-mounting every tab's content and resetting stateful children (canvases, editors, in-progress
+drags). The component now skips re-creating the model for echoes of FlexLayout's internal changes,
+so stateful tab children stay mounted; only a model written by your *own* Dash callbacks rebuilds
+the layout. Upgrade if you see this. (Note: the import name is `flexlayout_dash` as of 1.1.0.)
 
 ---
 

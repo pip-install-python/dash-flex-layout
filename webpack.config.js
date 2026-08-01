@@ -112,7 +112,7 @@ module.exports = (env, argv) => {
             extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
             // Add alias to prevent circular dependencies
             alias: {
-                'dash_flex_layout': path.resolve(__dirname, 'src/lib'),
+                'flexlayout_dash': path.resolve(__dirname, 'src/lib'),
                 // Create an alias for the jsx runtime to help with React 18
                 'react/jsx-runtime': require.resolve('react/jsx-runtime')
             }
@@ -132,7 +132,7 @@ module.exports = (env, argv) => {
                         chunks: 'all',
                         minSize: 0,
                         minChunks: 2,
-                        name: 'dash_flex_layout-shared'
+                        name: 'flexlayout_dash-shared'
                     }
                 }
             }

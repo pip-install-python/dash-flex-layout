@@ -1,4 +1,84 @@
-# dash is required to call `build:py`
-dash[dev]>=3.2.0
-dash-mantine-components>=1.0.0
+# ---------------------------------------------------------------------------
+# Documentation site requirements  (`python run.py`)
+#
+# The flexlayout-dash PACKAGE itself needs only `dash>=4.1` and
+# `typing_extensions` — see pyproject.toml. A `pip install flexlayout-dash`
+# user needs nothing on this list; everything here exists to run the docs site
+# and its live examples.
+#
+#     pip install -r requirements.txt
+#
+# To REBUILD the component (webpack bundle + regenerated Python wrappers) you
+# additionally need `pip install "dash[dev]"`, which supplies
+# dash-generate-components. That is a build tool, not a runtime dependency of
+# either the site or the package, so it is deliberately not pinned here.
+#
+# Compatibility testing: CI installs this file with the pinned Dash line
+# stripped, then installs one specific Dash version per job. The pin therefore
+# has to stay on a single line tagged `# COMPAT-MATRIX: dash`.
+# ---------------------------------------------------------------------------
+
+# Core Dash 4.x + Mantine UI
+#
+# The trailing marker is load-bearing: scripts/compat_matrix.py and
+# .github/workflows/ci.yml strip THIS line so each matrix leg gets exactly the
+# Dash version under test instead of resolving to the newest one. Keep the
+# marker on the same line as the pin.
+dash>=4.2.0  # COMPAT-MATRIX: dash
+dash-mantine-components>=2.7.0
 dash-iconify>=0.1.2
+
+# Markdown-driven docs engine (directives: toc / exec / source / kwargs).
+# NOT LISTED HERE ON PURPOSE — network standard, same as the boilerplate:
+# markdown2dash 0.1.2 declares `gunicorn<22`, which fights the CVE-driven
+# gunicorn>=23 floor below. It is installed as a second command with its
+# dependency graph skipped (its real deps — dash, dmc, pydantic — are all
+# named in this file anyway):
+#
+#     pip install -r requirements.txt
+#     pip install --no-deps markdown2dash==0.1.2
+#
+# The Dockerfile and CI both run this two-command install; the fingerprint
+# checks assert the dodge kept working (gunicorn >= 23 AND markdown2dash
+# importable).
+python-frontmatter>=1.0.0
+pydantic>=2.3.0
+
+# AI/LLM + SEO surfaces: /llms.txt, /<page>/llms.txt, /robots.txt, /sitemap.xml
+#
+# The >=2.3.3 floor is load-bearing, not cosmetic:
+#   2.2.0  merge (not assign) semantics for page metadata, so the home-page
+#          stub stopped overwriting registered llms_doc entries
+#   2.3.2  fixes the OAI-SearchBot `Disallow` bug that 2.0-era sites papered
+#          over with hand-written robots custom_rules (this repo never had
+#          that workaround — verified, nothing to remove)
+#   2.3.3  correct Anthropic robots taxonomy (ClaudeBot blocked as a training
+#          crawler, Claude-User/Claude-SearchBot allowed), no directive
+#          leakage into agent markdown, and the universal prerender that now
+#          owns canonical/og/title — which is why templates/index.html no
+#          longer hand-rolls those tags.
+#   2.3.4  network standard (2plot.ai, 2plot.dev, boilerplate all run it):
+#          resolve_site_title() gives every surface — /llms.txt H1, the llms
+#          viewer chip, prerender titles — one place to agree on the brand.
+dash-improve-my-llms[flask]>=2.3.4
+
+# Default backend + production WSGI server. gunicorn 21.x carried two
+# request-smuggling CVEs (CVE-2024-6827, CVE-2024-1135); >=23 is the network
+# floor, and it is why markdown2dash installs with --no-deps (see above).
+flask>=3.0.0
+gunicorn>=23.0
+
+# Loads .env into the process env before lib/* read it at import time (run.py
+# calls load_dotenv() first thing). Optional in production — Render passes
+# real env vars — but without it a local .env is silently ignored.
+python-dotenv>=1.0.0
+
+# 2plot network client calls (lib/ad_client.py, lib/analytics_tracker.py,
+# lib/satellite_reporter.py). All are dormant without their env keys, but the
+# imports are unconditional, so requests must be installed either way.
+requests>=2.31.0
+
+# The component being documented is NOT listed: it lives in this repo at
+# flexlayout_dash/, right beside run.py, so the live `.. exec::` examples
+# import the local build directly. Deploying the docs away from this repo would
+# need `flexlayout-dash>=1.2.0` added here.

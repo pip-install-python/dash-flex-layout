@@ -1,0 +1,13 @@
+/* flexlayout-dash containment inside the docs AppShell.
+ *
+ * FlexLayout-React renders `.flexlayout__layout` with `position: absolute`,
+ * filling its nearest *positioned* ancestor. The component root
+ * (`.dash-dock-container`) ships without `position: relative`, so inside a
+ * fixed-position AppShell the dock would otherwise escape its box and render
+ * behind the header / navbar / content. The examples also set this inline
+ * (so copy-pasted code works outside these docs); this rule is the safety net
+ * for any dock rendered on this site. */
+.dash-dock-container {
+    position: relative;
+    margin: 0.75rem 0;
+}

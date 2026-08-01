@@ -1,0 +1,86 @@
+# render.yaml — Render Blueprint for the flexlayout-dash documentation site.
+# Deploys run.py as a Docker web service, fronted by
+# https://flexlayout.2plot.dev.
+# Blueprint spec: https://render.com/docs/blueprint-spec
+#
+# How to deploy:
+#   1. Push this repo (with Dockerfile + render.yaml) to GitHub.
+#   2. Render dashboard -> New -> Blueprint -> select this repo.
+#   3. Render builds the Dockerfile and serves run:server with gunicorn.
+#   4. Settings -> Custom Domains -> add `flexlayout.2plot.dev`, then create
+#      the CNAME Render shows you on the 2plot.dev zone:
+#        flexlayout  CNAME  <service>.onrender.com
+#   5. Set CROSS_APP_WEBHOOK_SECRET in the dashboard (sync: false below) if you
+#      want this app reporting traffic to 2plot.ai. Everything else has a value
+#      here and needs no manual step.
+#
+# Local equivalent (no Render needed):
+#   docker build -t flexlayout-dash-docs .
+#   docker run --rm -p 8055:8055 -e PORT=8055 flexlayout-dash-docs
+#   open http://localhost:8055
+services:
+  - type: web
+    name: flexlayout-dash-docs
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Free tier works for a docs site, but it sleeps after ~15 min idle and
+    # cold-starts on the next request. Note the satellite analytics ledger also
+    # lives on the container filesystem, so evictions cost unreported traffic
+    # on free — SATELLITE_REPORT_INTERVAL_S below is shortened to compensate.
+    plan: free
+    # /healthz is the 2plot network convention (lib/health.py) and is excluded
+    # from traffic counts, so it makes a cleaner check than /.
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      # --- Core --------------------------------------------------------
+      # gunicorn worker processes. 2 is a reasonable default; drop to 1 if the
+      # free tier's 512 MB feels tight. The Dockerfile also runs 4 threads per
+      # worker for callback concurrency.
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # Public origin for canonical URLs, sitemap.xml and llms.txt. Must match
+      # app._base_url in run.py, which the prerender uses for canonical tags.
+      - key: FLEXLAYOUT_BASE_URL
+        value: https://flexlayout.2plot.dev
+
+      # --- 2plot.dev ad network (lib/ad_client.py) ---------------------
+      # Without AD_SERVER_URL reachable the slot simply stays hidden, and a
+      # 60s circuit breaker stops retrying, so an outage never slows a page.
+      - key: AD_SERVER_URL
+        value: https://2plot.dev
+      # This app's identity in the ad network's /admin/ad-board tables.
+      - key: AD_APP_ID
+        value: flexlayout-dash
+
+      # --- 2plot.ai satellite analytics --------------------------------
+      # lib/analytics_tracker.py -> lib/traffic_rollup.py
+      #                          -> lib/satellite_reporter.py
+      #
+      # The shared HMAC secret every satellite holds. Set it in the Render
+      # dashboard (same value as on 2plot.ai) — never in this file.
+      # Without it the app still serves /healthz but reports nothing.
+      #   Hub side, to health-sweep this app hourly, add to 2plot.ai:
+      #   PULSE_POLL_TARGETS=...,flexlayout=https://flexlayout.2plot.dev/healthz
+      - key: CROSS_APP_WEBHOOK_SECRET
+        sync: false
+      # The series name this app reports under on 2plot.ai/traffic.
+      # "flexlayout" is this app's 2plot network-directory key — the hub labels
+      # and colours the series from that directory.
+      #
+      # NOTE the variable name: SATELLITE_APP_KEY, not the SATELLITE_APP_ID the
+      # pre-hub-client generation used. lib/satellite_reporter.py reads the new
+      # name; the old one is inert. The module's default is also "flexlayout"
+      # (the template ships "boilerplate", which would overwrite another app's
+      # rows at the hub), so this is belt-and-braces rather than load-bearing.
+      - key: SATELLITE_APP_KEY
+        value: flexlayout
+      # Minimum seconds between rollup POSTs (the contract asks for hourly).
+      # 1800 halves what a free-tier eviction can swallow.
+      - key: SATELLITE_REPORT_INTERVAL_S
+        value: "1800"
+
+      # NOTE: there is deliberately no Clerk auth on this site. Every
+      # documentation page is public, so none of the CLERK_* satellite keys
+      # that leaflet.2plot.dev sets apply here.

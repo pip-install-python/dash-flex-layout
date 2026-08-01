@@ -1,0 +1,103 @@
+# Packaging for flexlayout-dash.
+#
+# The rule this file enforces: the PyPI artifact contains the component and
+# nothing else. The documentation site that lives in this same repository
+# (documentation/) has its own dependency list in
+# documentation/requirements.txt and never appears here.
+#
+# See .subdomains/PACKAGING.md in dash-hook-my-ai.
+
+[build-system]
+# >=77, not the >=61 the network template carries. 61 is the floor for reading
+# [project] at all, but the PEP 639 `license = "MIT"` string + `license-files`
+# below only parse on 77+ — on 75.8.0 setuptools rejects them outright with
+# "`project.license` must be valid exactly by one definition". A CI build with
+# isolation resolves the newest setuptools and hides the mismatch; a build with
+# --no-isolation against an older pinned toolchain is where it surfaces.
+#
+# `wheel` is deliberately NOT listed. setuptools has vendored wheel building
+# since 70.1 and its own docs say to drop the dependency; listing it makes the
+# build fail outright on an environment where setuptools is present and the
+# standalone wheel package is not.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flexlayout-dash"
+# Keep in sync with package.json, flexlayout_dash/package-info.json (generated
+# by dash-generate-components, and what flexlayout_dash.__version__ actually
+# reads at runtime) and documentation/lib/constants.py:APP_VERSION.
+# scripts/check_release.py enforces all four.
+version = "1.2.0"
+description = "IDE-style dockable, resizable and floatable window panels for Plotly Dash, wrapping FlexLayout-React."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Pip Install Python LLC", email = "pipinstallpython@gmail.com" }]
+keywords = ["dash", "plotly", "layout", "docking", "tabs", "panels", "flexlayout"]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: Dash",
+    "Intended Audience :: Developers",
+    # No "License :: OSI Approved :: MIT License" classifier: PEP 639 supersedes
+    # it with the `license = "MIT"` expression above, and setuptools 77+ HARD
+    # ERRORS when both are present. The licence still shows on PyPI, from the
+    # expression. (The network template still lists both; this combination
+    # cannot build on a current toolchain.)
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: JavaScript",
+    "Topic :: Software Development :: User Interfaces",
+]
+
+# The PACKAGE floor, which is not the documentation site's floor. The site
+# needs 3.10+ (python-frontmatter imports typing.TypeGuard); that does not
+# constrain anyone who pip-installs this. ci.yml tests both separately.
+requires-python = ">=3.9"
+
+# ONLY what the component's own code imports. Verified mechanically
+# (2026-07-31) — the package imports dash, typing_extensions and stdlib, and
+# nothing else:
+#     grep -rhoE "^(import|from) [a-z_.]+" flexlayout_dash/*.py | sort -u
+#
+# dash-mantine-components is deliberately ABSENT: 0 imports in the package,
+# 10 files in documentation/. The dock reads Mantine's CSS variables and the
+# `data-mantine-color-scheme` attribute, which is a runtime convention, not an
+# import — a DMC-less app just gets the fallback colours.
+#
+# NEVER here, in any component: dash-improve-my-llms, dash-clerk-auth,
+# dash-documentation-boilerplate, gunicorn/uvicorn. ci.yml's
+# package-python-range job installs ONLY this wheel plus Dash, which is that
+# rule expressed as an executable test.
+#
+# Dash 4.3.0 is in the supported range but must not be DEPLOYED with the
+# FastAPI backend — its page catch-all does not set the request context, so
+# every non-root URL 500s. Upstream, fixed in 4.4.0. Pin ~=4.4.1 in production.
+dependencies = [
+    "dash>=4.1,<5",
+    # Imported unconditionally by the generated wrappers for TypedDict /
+    # NotRequired / Literal (flexlayout_dash/DashFlexLayout.py:4, Tab.py:4).
+    # It resolves today only as a transitive dependency of Dash, which is not
+    # a promise Dash makes — declare it.
+    "typing_extensions>=4.0",
+]
+
+[project.urls]
+Homepage = "https://flexlayout.2plot.dev"
+Documentation = "https://flexlayout.2plot.dev"
+Repository = "https://github.com/pip-install-python/dash-flex-layout"
+"Bug Tracker" = "https://github.com/pip-install-python/dash-flex-layout/issues"
+Changelog = "https://github.com/pip-install-python/dash-flex-layout/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+# Explicit, never find_packages() — which would happily discover
+# `documentation.lib` or `scripts` as packages the moment either gains an
+# __init__.py. An explicit list cannot drift.
+packages = ["flexlayout_dash"]
+include-package-data = true

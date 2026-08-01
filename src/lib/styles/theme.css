@@ -50,6 +50,11 @@
 
 /* DashDock container styles */
 .dash-dock-container {
+  /* FlexLayout renders `.flexlayout__layout` with position: absolute, filling
+     the nearest positioned ancestor. Make this container that ancestor so the
+     dock stays inside its own box instead of escaping (e.g. behind a fixed
+     AppShell navbar). Consumers still set an explicit height via the style prop. */
+  position: relative;
   font-family: var(--mantine-font-family, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif);
   background-color: var(--dashdock-bg-color);
   color: var(--dashdock-text-color);

@@ -1,0 +1,44 @@
+# Keep the image small and the build cache stable. The committed
+# flexlayout_dash/ bundle is what the app serves, so none of the JS toolchain
+# needs to reach the container.
+.git/
+.github/
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.compat/
+
+# TypeScript sources + toolchain — the bundle is pre-built and committed.
+src/
+webpack.config.js
+tsconfig.json
+package-lock.json
+.babelrc
+.eslintrc
+.eslintignore
+.prettierrc
+.pylintrc
+
+# The 1 MB react-docgen artifact. Only `dash-generate-components` reads it.
+flexlayout_dash/metadata.json
+
+# README images — served nowhere, they only pad the image.
+github_assets/
+
+# Local state and secrets
+.env
+.env.*
+visitor_analytics.json
+visitor_analytics.json.lock
+.satellite_report.lease
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+.claude/
