@@ -9,7 +9,7 @@ icon: mdi:dock-left
 
 .. toc::
 
-## Border panels
+### Border panels
 
 Borders are collapsible panels docked to the edges of the layout — think VS Code's
 Explorer, Search, and Terminal. They live in the top-level `borders` list, each with a
@@ -20,7 +20,7 @@ click again to collapse it.
 
 .. exec::docs.borders.example
 
-## Notes
+### Notes
 
 - `size` sets the panel's width (left/right) or height (bottom) in pixels.
 - `borderSize` / `borderMinSize` in `global` set defaults across all borders.

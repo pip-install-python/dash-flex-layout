@@ -36,7 +36,7 @@ import dash
 from dash import Dash, Input, Output, clientside_callback
 
 from components.appshell import create_appshell
-from lib import network_directory
+from lib import bulletin, network_directory
 from lib.analytics_tracker import tracker
 from lib.constants import (
     BASE_URL,
@@ -162,6 +162,17 @@ def _track_visitor():
 # live in templates/index.html — see the rule documented there).
 # Works on the Flask backend with no extra gating.
 add_llms_routes(app, LLMSConfig(warn_missing_llms_doc=True))
+
+# The hub's announcement feed, rendered in the llms.txt viewer's header
+# (lib/bulletin.py). A function that returns whether it wired, and a boot
+# line that says so — never four commentable lines: the boilerplate shipped
+# exactly that, commented out for weeks against a hub endpoint that was
+# already serving, and an announcement that never appears is not a symptom
+# anyone notices. tests/test_bulletin.py fails if this call is commented out.
+print(
+    f"[flexlayout] network bulletin: "
+    f"{'wired -> ' + (bulletin.url() or '') if bulletin.configure() else 'off (NETWORK_BULLETIN_URL unset)'}"
+)
 
 app.layout = create_appshell(dash.page_registry.values())
 

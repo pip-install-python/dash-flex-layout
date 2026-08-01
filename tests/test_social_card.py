@@ -87,6 +87,24 @@ def test_the_image_is_declared_exactly_once(client, page_paths):
         assert len(_meta(html, "twitter:image")) == 1
 
 
+def test_no_dash_placeholder_is_named_inside_a_comment():
+    """The bug behind dash-email's doubled tags, pinned at its source.
+
+    Dash resolves `{%…%}` by plain string replacement over the whole template,
+    comments included. A placeholder named in a comment is therefore not
+    documentation — it is a second, hidden copy of whatever that placeholder
+    emits. The metas one is what put two empty og:image tags on every page of
+    email.2plot.dev.
+    """
+    template = (REPO_ROOT / "templates" / "index.html").read_text()
+    for comment in re.findall(r"<!--.*?-->", template, flags=re.S):
+        found = re.findall(r"\{%\s*\w+\s*%\}", comment)
+        assert not found, (
+            f"a comment in templates/index.html names {found} — Dash will "
+            "substitute it there and emit the block twice"
+        )
+
+
 def test_the_image_is_not_an_svg(client):
     """SVG is rejected by Facebook, Twitter/X, LinkedIn and Slack alike.
 

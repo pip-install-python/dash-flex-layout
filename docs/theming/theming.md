@@ -9,7 +9,7 @@ icon: mdi:palette-outline
 
 .. toc::
 
-## Follows your Mantine theme
+### Follows your Mantine theme
 
 `DashFlexLayout` watches the document's `data-mantine-color-scheme` attribute with a
 `MutationObserver`, so it restyles itself whenever your app toggles light/dark — no extra
@@ -17,7 +17,7 @@ wiring needed. Try the sun/moon switch in the header: the dock below follows it.
 
 .. exec::docs.theming.example
 
-## Forcing a scheme
+### Forcing a scheme
 
 To pin the scheme regardless of the page, pass the `colorScheme` prop:
 
@@ -25,7 +25,7 @@ To pin the scheme regardless of the page, pass the `colorScheme` prop:
 dfl.DashFlexLayout(id="dock", model=model, children=tabs, colorScheme="dark")
 ```
 
-## Custom styling
+### Custom styling
 
 The component renders under `.dash-dock-container` with a `.dash-dock-light` or
 `.dash-dock-dark` modifier, so you can target FlexLayout's classes in your own CSS:

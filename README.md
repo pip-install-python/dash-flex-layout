@@ -153,6 +153,7 @@ Run the docs locally:
 
 ```bash
 pip install -r requirements.txt
+pip install --no-deps markdown2dash==0.1.2   # see requirements.txt: gunicorn CVE pin
 python run.py                          # http://localhost:8055
 ```
 
@@ -303,7 +304,8 @@ No socket, no browser.
 ```bash
 # Install dependencies
 npm install                              # TypeScript + webpack toolchain
-pip install -r requirements.txt          # component build deps
+pip install -r requirements.txt          # docs-site + build deps
+pip install --no-deps markdown2dash==0.1.2   # second command on purpose — see requirements.txt
 
 # Build the JS bundle + regenerate the Python wrappers
 npm run build                            # webpack bundle + dash-generate-components

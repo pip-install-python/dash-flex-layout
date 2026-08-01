@@ -44,6 +44,22 @@ first time with this release._
     (`build/social-cards/flexlayout.2plot.dev.png`), served from
     cdn.2plot.ai — never from the app, whose cold starts would poison
     scraper caches.
+- **Network bulletin wired** (`lib/bulletin.py`, the Mode-B fix from
+  `network-bulletin-rollout.md`): the hub's announcement feed now renders in
+  the llms.txt viewer header. The package never reads `NETWORK_BULLETIN_URL`
+  itself — run.py feeds it to `configure_bulletin()` with
+  `app_id=flexlayout` (derived from `satellite_reporter.app_key`, never
+  typed), prints a boot line saying which state it is in, and
+  `tests/test_bulletin.py` fails if the call is ever commented out.
+  `scripts/smoke_live.py` warns (never fails) when the banner shows the
+  unwired fallback. Verified in the container: both hub tips render and
+  "No announcements." is gone.
+- **Ported dash-email's `tests/test_smoke_live.py`** (the smoke script run
+  in-process with `fetch` stubbed, including the reshaped-card and dead-peer
+  cases) and its `test_no_dash_placeholder_is_named_inside_a_comment` — a
+  `{%…%}` named inside an HTML comment is a second, hidden copy of that
+  block, the source of dash-email's two empty og:image tags. Suite is now
+  73 tests.
 - **`modelAction` prop — imperative FlexLayout actions on the LIVE model.** Dash callbacks can now add/remove/select/rename tabs and adjust weights at runtime without replacing the `model` prop (which is ignored under `useStateForModel=True` and re-mounts every tab otherwise). Shape: `{type, nonce, ...args}` with a changed `nonce` per action. Types: `addNode` (`{json, toNodeId, location?, index?, select?}`; re-adding an existing tab id selects it instead of throwing), `deleteTab`, `selectTab`, `renameTab`, `updateNodeAttributes`, `adjustWeights`. Actions apply via `model.doAction(Actions.*)`, so sibling tabs keep their DOM — no re-mounts. A `dfl.Tab` child whose tab isn't in the model is (as always) silently skipped, so keep dynamic-tab children in `children` permanently and let `addNode`/`deleteTab` control visibility. Motivated by a broadcast-monitoring app that opens an editor tab on demand.
 - **Documentation site: `.env.example`** documenting every environment key the
   site reads (canonical base URL, ad network, satellite traffic reporting,
@@ -94,6 +110,23 @@ first time with this release._
   render on GitHub but appear broken on the PyPI project page.
 
 ### Fixed
+- **Documentation site: the table of contents rendered empty on every page**
+  (and with it the aside's ad slot never showed). The `.. toc::` directive —
+  network convention — links `###`-and-deeper headings only, and this site's
+  docs used `##` for sections, so the TOC found nothing and the aside
+  rendered blank. All six documented pages now use `###` sections, matching
+  dash-email and the boilerplate. (The ad slot itself was wired correctly:
+  the hub returns 204 for `app=flexlayout` because no campaign targets this
+  app yet — that is /admin/ad-board data on the hub, not satellite code.)
+- **"Found on the email pass" items** (satellite-rollout-kickoff):
+  `lib/constants.BASE_URL` now accepts the network-shared `APP_BASE_URL`
+  first and the legacy `FLEXLAYOUT_BASE_URL` second, with render.yaml
+  setting BOTH (removing one of two names from a live service is how a
+  satellite deindexes itself); render.yaml's `AD_APP_ID` still carried the
+  legacy `flexlayout-dash` and was overriding the code default — now the
+  short key `flexlayout`; and the two-command markdown2dash install now
+  appears in both README quickstarts and CLAUDE.md, not just the
+  Dockerfile/CI.
 - **Documentation site: invalid `<p>` nesting on every page with inline
   emphasis.** markdown2dash 0.1.2 renders `**bold**`, `*italic*` and
   `~~struck~~` as `dmc.Text`, which is a `<p>`, inside the paragraph's own

@@ -9,19 +9,19 @@ icon: mdi:book-open-variant
 
 .. toc::
 
-## DashFlexLayout
+### DashFlexLayout
 
 The main container. Pass a `model` (the layout tree) and a list of `Tab` children.
 
 .. kwargs::flexlayout_dash.DashFlexLayout
 
-## Tab
+### Tab
 
 A content wrapper. Its `id` must match a `tab` `id` in the model.
 
 .. kwargs::flexlayout_dash.Tab
 
-## Model schema
+### Model schema
 
 The `model` is FlexLayout's JSON. Its top-level keys are:
 

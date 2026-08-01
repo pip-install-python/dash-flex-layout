@@ -59,10 +59,18 @@ APP_VERSION = "1.2.0"
 # Drives <link rel="canonical"> on every page, the absolute URLs in
 # sitemap.xml, and the "this app" entry in /llms.txt. The default IS this
 # site's real domain (unlike the boilerplate, whose default is a footgun for
-# forks); override only for a preview/staging host. Mirrored by
-# FLEXLAYOUT_BASE_URL in render.yaml.
-BASE_URL = os.environ.get(
-    "FLEXLAYOUT_BASE_URL", "https://flexlayout.2plot.dev"
+# forks); override only for a preview/staging host.
+#
+# TWO env names, deliberately ("Found on the email pass" §4): APP_BASE_URL is
+# the network-shared spelling that every host's scripts/ and tests/ can rely
+# on; FLEXLAYOUT_BASE_URL is this repo's legacy alias, still set on the live
+# service. Accept the shared name first, the legacy one second — and
+# render.yaml sets BOTH, because removing one of two names from a live
+# service is how a satellite quietly deindexes itself.
+BASE_URL = (
+    os.environ.get("APP_BASE_URL")
+    or os.environ.get("FLEXLAYOUT_BASE_URL")
+    or "https://flexlayout.2plot.dev"
 ).rstrip("/")
 
 

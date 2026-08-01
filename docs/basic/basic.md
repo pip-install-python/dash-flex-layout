@@ -9,7 +9,7 @@ icon: mdi:view-split-vertical
 
 .. toc::
 
-## Rows, columns, and tabsets
+### Rows, columns, and tabsets
 
 Build layouts by nesting three node types inside `layout`:
 
@@ -25,7 +25,7 @@ three tabs. Drag tabs between tabsets, drag the splitters, or maximize a tabset 
 
 .. exec::docs.basic.example
 
-## Notes
+### Notes
 
 - A `tabset` can hold many `tab`s — they share one tab strip.
 - Nest `row` and `column` to any depth for IDE-style layouts.
