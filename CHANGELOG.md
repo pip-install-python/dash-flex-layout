@@ -164,6 +164,12 @@ semver is a major bump, not a minor one. Everything in this section and the
   home page's frontmatter llms_doc is untouched), the home markdown H1 and
   the webmanifest — resolved on every surface by 2.3.4's
   `resolve_site_title`, and pinned by `tests/test_site_identity.py`.
+- **`release.yml` was missing the two-command markdown2dash install** in its
+  smoke step — caught on the workflow's first-ever execution (the v2.0.0 tag;
+  no tag had ever been pushed before, so the step predating the gunicorn>=23
+  dodge was never exercised). The Dockerfile, ci.yml and compat_matrix.py all
+  carried the dance; the release path now matches, and the v2.0.0 tag was
+  moved to the fixed commit before anything was published.
 - **Documentation site: robots.txt now actually blocks AI-training crawlers.**
   `block_ai_training` was `False` while the comment above it claimed the
   opposite. Enabling it only became safe with dash-improve-my-llms 2.3.3, which

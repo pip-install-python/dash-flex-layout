@@ -92,10 +92,17 @@ jobs:
           node-version: "20"
 
       - name: Smoke test against the current Dash
+        # Two-command install, same as the Dockerfile and ci.yml: markdown2dash
+        # 0.1.2 declares gunicorn<22 against the CVE-driven >=23 floor in
+        # requirements.txt, so it is absent there and installs with --no-deps.
+        # This step was the one place that missed the dance — release.yml first
+        # ran at v2.0.0, after the dodge landed everywhere else, and the fresh
+        # runner failed on the missing import.
         run: |
           python -m pip install --upgrade pip
           grep -v 'COMPAT-MATRIX: dash' requirements.txt > /tmp/reqs.txt
           python -m pip install dash -r /tmp/reqs.txt
+          python -m pip install --no-deps markdown2dash==0.1.2
           python scripts/smoke_test.py
 
       - name: Build
