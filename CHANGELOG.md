@@ -9,14 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-08-01
+## [2.0.0] - 2026-08-02
 
-_First PyPI upload since 1.0.0. The 1.1.0 section below was finalized on
-2026-06-22 but never uploaded, so its changes — including the breaking
-`dash_flex_layout` → `flexlayout_dash` import rename — reach PyPI for the
-first time with this release._
+_First PyPI upload since 1.0.0, renumbered from a prepared-but-never-published
+1.2.0. Neither 1.1.0 (finalized 2026-06-22) nor 1.2.0 was ever uploaded, so
+this release carries 1.1.0's **breaking** `dash_flex_layout` →
+`flexlayout_dash` import rename to PyPI for the first time — which under
+semver is a major bump, not a minor one. Everything in this section and the
+1.1.0 section below is new to anyone upgrading from 1.0.0._
 
 ### Added
+- **The project's own brand mark.** `scripts/make_brand_assets.py` (the
+  dash-emoji-mart pattern) draws the dock glyph — indigo panels with a tab
+  notch on a dark tile, the layout the component actually produces — and
+  derives every icon surface from it: the manifest icons
+  (`favicon-192/512.png`), the opaque `apple-touch-icon.png`, the multi-size
+  `favicon.ico`, and `site.webmanifest` itself from `lib/constants.py`.
+  Replaces the generic pip-install-python package-box icon set that arrived
+  with the favicon folder. `templates/index.html` now declares the icon links
+  explicitly, and `make_social_card.py --artwork` defaults to the new 512
+  mark.
 - **The 2plot network standard, in full** (the satellite pass proven on
   2plot.ai, 2plot.dev, boilerplate.2plot.dev and leaflet.2plot.dev), landed
   together with this site's FIRST deploy to https://flexlayout.2plot.dev:
@@ -108,6 +120,10 @@ first time with this release._
 - **README: added the 2plot.ai logo** above the header, and switched the image
   references to absolute `raw.githubusercontent.com` URLs — relative paths
   render on GitHub but appear broken on the PyPI project page.
+- **Stale `documentation/` references cleaned out** of `pyproject.toml`'s
+  comments and the README's development section (`cd documentation && python
+  run.py`) — the site has lived at the repo root since the reorganisation
+  above, and the comments still described the old layout.
 
 ### Fixed
 - **Documentation site: the table of contents rendered empty on every page**

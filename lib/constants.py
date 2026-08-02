@@ -51,7 +51,7 @@ PAGE_TITLE_PREFIX = f"{SITE_SHORT_NAME} | "
 PRIMARY_COLOR = "indigo"
 # Reported by /healthz to the 2plot.ai pulse sweep. Keep in sync with
 # package.json — scripts/check_release.py enforces it.
-APP_VERSION = "1.2.0"
+APP_VERSION = "2.0.0"
 
 # ---------------------------------------------------------------------------
 # Public origin

@@ -52,9 +52,16 @@
     <meta property="og:image:alt" content="flexlayout-dash — resizable panel layouts for Dash">
     <meta name="twitter:image:alt" content="flexlayout-dash — resizable panel layouts for Dash">
 
-    <!-- The installable-app surface. iOS ignores the manifest and uses the
-         apple-touch-icon; everything else reads assets/favicon/site.webmanifest.
-         Keep theme-color in step with the manifest's theme_color. -->
+    <!-- The installable-app surface. Every icon here is generated from one
+         drawn mark by scripts/make_brand_assets.py — run that after any brand
+         change rather than exporting by hand. Dash's favicon placeholder
+         below serves assets/favicon/favicon.ico for the browser tab (Dash
+         scans the assets tree for the name); these links cover the rest. iOS
+         ignores the manifest and uses the apple-touch-icon, which is emitted
+         opaque — iOS composites transparency onto WHITE. Keep theme-color in
+         step with the manifest's theme_color. -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon/favicon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon/favicon-512.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon/apple-touch-icon.png">
     <link rel="manifest" href="/assets/favicon/site.webmanifest">
     <meta name="theme-color" content="#4c6ef5">

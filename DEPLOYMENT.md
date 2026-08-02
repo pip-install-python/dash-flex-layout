@@ -35,7 +35,7 @@ Everything the deployment needs is in the repo root: [`Dockerfile`](./Dockerfile
    should return
 
    ```json
-   {"ok": true, "app": "flexlayout", "version": "1.2.0",
+   {"ok": true, "app": "flexlayout", "version": "2.0.0",
     "backend": "flask", "dash_version": "4.4.1"}
    ```
 

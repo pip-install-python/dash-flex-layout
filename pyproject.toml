@@ -2,8 +2,8 @@
 #
 # The rule this file enforces: the PyPI artifact contains the component and
 # nothing else. The documentation site that lives in this same repository
-# (documentation/) has its own dependency list in
-# documentation/requirements.txt and never appears here.
+# (at the repo root: run.py, docs/, pages/, lib/, ...) has its own dependency
+# list in requirements.txt and never appears here.
 #
 # See .subdomains/PACKAGING.md in dash-hook-my-ai.
 
@@ -26,9 +26,9 @@ build-backend = "setuptools.build_meta"
 name = "flexlayout-dash"
 # Keep in sync with package.json, flexlayout_dash/package-info.json (generated
 # by dash-generate-components, and what flexlayout_dash.__version__ actually
-# reads at runtime) and documentation/lib/constants.py:APP_VERSION.
+# reads at runtime) and lib/constants.py:APP_VERSION.
 # scripts/check_release.py enforces all four.
-version = "1.2.0"
+version = "2.0.0"
 description = "IDE-style dockable, resizable and floatable window panels for Plotly Dash, wrapping FlexLayout-React."
 readme = "README.md"
 license = "MIT"
@@ -67,7 +67,7 @@ requires-python = ">=3.9"
 #     grep -rhoE "^(import|from) [a-z_.]+" flexlayout_dash/*.py | sort -u
 #
 # dash-mantine-components is deliberately ABSENT: 0 imports in the package,
-# 10 files in documentation/. The dock reads Mantine's CSS variables and the
+# 10 files in the docs site. The dock reads Mantine's CSS variables and the
 # `data-mantine-color-scheme` attribute, which is a runtime convention, not an
 # import — a DMC-less app just gets the fallback colours.
 #

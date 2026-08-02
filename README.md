@@ -66,7 +66,7 @@ pip install flexlayout-dash
 ```
 
 The import name matches the distribution: `import flexlayout_dash`. (Releases
-before 1.1.0 imported as `dash_flex_layout`; that name is gone.)
+before 2.0.0 imported as `dash_flex_layout`; that name is gone.)
 
 ## Quick Start
 
@@ -313,7 +313,7 @@ npm run build:js                         # webpack only (after .tsx edits)
 npm run build:backends                   # regenerate Python classes only
 
 # Run
-cd documentation && python run.py        # documentation site → http://localhost:8055
+python run.py                            # documentation site → http://localhost:8055
 
 # Test
 python scripts/smoke_test.py
