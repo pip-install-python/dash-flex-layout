@@ -24,11 +24,13 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # Free tier works for a docs site, but it sleeps after ~15 min idle and
-    # cold-starts on the next request. Note the satellite analytics ledger also
-    # lives on the container filesystem, so evictions cost unreported traffic
-    # on free — SATELLITE_REPORT_INTERVAL_S below is shortened to compensate.
-    plan: free
+    # Starter (the network reference shape, 2026-08): free sleeps after
+    # ~15 min idle, cold-starts on the next request, and was measured dark
+    # (503) on the 2026-08-13 network sweep. Starter also permits the
+    # persistent disk below, which is what makes the analytics ledger
+    # survive deploys. The owner upgraded the live dashboard 2026-08-16;
+    # this file matches it.
+    plan: starter
     # /healthz is the 2plot network convention (lib/health.py) and is excluded
     # from traffic counts, so it makes a cleaner check than /.
     healthCheckPath: /healthz
@@ -94,10 +96,35 @@ services:
       - key: SATELLITE_APP_KEY
         value: flexlayout
       # Minimum seconds between rollup POSTs (the contract asks for hourly).
-      # 1800 halves what a free-tier eviction can swallow.
+      # 1800 predates the starter plan + disk (it halved what a free-tier
+      # eviction could swallow); harmless now — the hub takes the LAST
+      # report for a given (app, date).
       - key: SATELLITE_REPORT_INTERVAL_S
         value: "1800"
+
+      # The hub takes the LAST report for a given (app, date). On an
+      # ephemeral filesystem a mid-day deploy wipes the ledger and the next
+      # hourly report overwrites the day's real total with whatever accrued
+      # since the restart. The disk below is what stops that.
+      - key: TRAFFIC_ANALYTICS_FILE
+        value: /var/data/visitor_analytics.json
+
+      # Access tiers for the tiered corpus documents (/llms-small.txt,
+      # /llms-full.txt — dash-improve-my-llms >= 2.4.0). Deliberately set to
+      # the default here so every fork SEES the knob: the 402 experiment
+      # tightens the full corpus by flipping this to `auth`, per satellite,
+      # with no code change. On THIS site tiers are recorded, not enforced
+      # (no access control is wired) — see run.py. Values in .env.example.
+      - key: LLMS_SMALL_TIER
+        value: public
+      - key: LLMS_FULL_TIER
+        value: public
 
       # NOTE: there is deliberately no Clerk auth on this site. Every
       # documentation page is public, so none of the CLERK_* satellite keys
       # that leaflet.2plot.dev sets apply here.
+
+    disk:
+      name: analytics
+      mountPath: /var/data
+      sizeGB: 1

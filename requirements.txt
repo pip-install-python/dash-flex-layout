@@ -68,7 +68,15 @@ pydantic>=2.3.0
 #   2.3.4  network standard (2plot.ai, 2plot.dev, boilerplate all run it):
 #          resolve_site_title() gives every surface — /llms.txt H1, the llms
 #          viewer chip, prerender titles — one place to agree on the brand.
-dash-improve-my-llms[flask]>=2.3.4
+#   2.4.0  tiered corpus documents: /llms-small.txt (compact briefing) and
+#          /llms-full.txt (every page's prose in one fetch), the knobs
+#          run.py registers with lib/page_tiers for the 402 experiment.
+#   2.5.1  Tier-B SEO standard: configure_seo, crawler <title> carrying the
+#          site name, per-page title/image_url/schema_type reaching the
+#          crawler document, /favicon.ico answered with a redirect instead
+#          of the app shell, and a prerender that no longer clobbers the
+#          browser's per-page <title>.
+dash-improve-my-llms[flask]>=2.5.1
 
 # Default backend + production WSGI server. gunicorn 21.x carried two
 # request-smuggling CVEs (CVE-2024-6827, CVE-2024-1135); >=23 is the network

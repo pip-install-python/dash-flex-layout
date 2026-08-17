@@ -36,7 +36,7 @@ import dash
 from dash import Dash, Input, Output, clientside_callback
 
 from components.appshell import create_appshell
-from lib import bulletin, network_directory
+from lib import bulletin, network_directory, page_tiers
 from lib.analytics_tracker import tracker
 from lib.constants import (
     BASE_URL,
@@ -155,6 +155,17 @@ def _track_visitor():
     except Exception:  # noqa: BLE001 — analytics must never break a page view
         pass
 
+
+# Tiered corpus documents (dash-improve-my-llms >= 2.4.0). Pseudo-paths:
+# they never enter dash.page_registry, so they cannot leak into listings —
+# registering them here gives this satellite the same tier knobs as the rest
+# of the fleet (LLMS_SMALL_TIER / LLMS_FULL_TIER; unset = the default tier,
+# i.e. public), so the 402 experiment can tighten the full corpus per
+# satellite by flipping an env var. This site wires no access control, so
+# the tiers are recorded (lib/page_tiers.py), not enforced — instrument
+# first, price later. Inert on older package versions.
+page_tiers.register("/llms-small.txt", os.environ.get("LLMS_SMALL_TIER"))
+page_tiers.register("/llms-full.txt", os.environ.get("LLMS_FULL_TIER"))
 
 # Wire up /llms.txt, /<page>/llms.txt, /robots.txt, /sitemap.xml, the bot
 # middleware and the universal prerender (which owns the canonical link and

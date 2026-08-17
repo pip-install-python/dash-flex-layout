@@ -15,10 +15,12 @@ from lib.ad_client import inject_ad_into_aside
 # as <p>, nesting a <p> inside the paragraph's own <p>. See lib/renderer.py.
 from lib.renderer import create_parser
 from lib.constants import OG_IMAGE_URL, PAGE_TITLE_PREFIX, NAME_CONTENT_MAP
+from lib import page_tiers
 from lib.directives.kwargs import Kwargs
 from lib.directives.llms_copy import LlmsCopy
 from lib.directives.source import SC
 from lib.directives.toc import TOC
+from lib.versions import substitute_versions
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +38,11 @@ class Meta(BaseModel):
     package: str = "flexlayout_dash"
     category: Optional[str] = None
     icon: Optional[str] = None
+    # Who may read this page: public | auth | admin | hidden. Absent means
+    # public — see lib/page_tiers.py for the tier model and why the default
+    # is open. This site wires no access control yet, so a declared tier is
+    # recorded (the 402 groundwork's instrumentation), never enforced.
+    tier: Optional[str] = None
 
 
 _SOURCE_DIRECTIVE = re.compile(r'^\.\. source::(.+?)$', re.MULTILINE)
@@ -100,6 +107,16 @@ for file in files:
     metadata, content = frontmatter.parse(file.read_text())
     metadata = Meta(**metadata)
 
+    # Substitute derived facts BEFORE any consumer sees the text, so the
+    # browser page, the copy button, and /<page>/llms.txt all publish the
+    # same truth. A doc writes {{VERSION:<distribution>}} instead of a
+    # version number — any INSTALLED distribution (see lib/versions.py).
+    # NOTE: flexlayout-dash itself does not qualify — the docs import the
+    # local build from flexlayout_dash/ without pip-installing it (see the
+    # tail of requirements.txt), so {{VERSION:flexlayout-dash}} would raise
+    # at boot in the Docker image, where no such distribution exists.
+    content = substitute_versions(content, source=str(file))
+
     # Store raw markdown content in NAME_CONTENT_MAP for the LLM copy button.
     NAME_CONTENT_MAP[metadata.name] = content
 
@@ -138,6 +155,10 @@ for file in files:
     # Feed the expanded markdown into dash-improve-my-llms so /<page>/llms.txt
     # serves the directive-expanded prose. This replaces the custom Flask
     # route that used to live in run.py and works across all three backends.
+    # Record the declared tier before the prose is registered, so a gate can
+    # never be applied later than the content it is meant to gate.
+    page_tiers.register(metadata.endpoint, metadata.tier)
+
     expanded = _expand_source_directives(content)
     register_page_metadata(
         path=metadata.endpoint,
