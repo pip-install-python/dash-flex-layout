@@ -106,14 +106,39 @@ mean the same thing as every other satellite's.
 | Variable | Where | Value |
 |---|---|---|
 | `CROSS_APP_WEBHOOK_SECRET` | **Render dashboard** | the shared HMAC secret (same value as on 2plot.ai) |
-| `SATELLITE_APP_KEY` | `render.yaml` | `flexlayout` |
-| `SATELLITE_REPORT_INTERVAL_S` | `render.yaml` | `1800` |
+| `SATELLITE_APP_KEY` | `render.yaml` + `run.py` | `flexlayout` |
+| `SATELLITE_REPORT_INTERVAL_S` | `render.yaml` | `900` |
+| `SATELLITE_PRESENCE_INTERVAL_S` | unset (default `60`) | seconds between presence pings; `0` disables |
+
+The reporter runs **two** threads. The hourly signed rollup is the source of
+the board's daily numbers; a second, lighter **presence ping** posts
+`{app, active}` to `/api/satellite/active` about once a minute so the hub can
+show who is on this satellite right now. Presence is display-only and ephemeral
+by contract — the hub holds it in memory with a ~3-minute TTL and never writes
+it to the event log — and every presence failure is swallowed silently, because
+a hub that predates the endpoint simply 404s. Both share
+`CROSS_APP_WEBHOOK_SECRET`; there is no second key.
 
 > **`SATELLITE_APP_KEY`, not `SATELLITE_APP_ID`.** The pre-hub-client
 > generation of this code used the `_ID` name; `satellite_reporter.py` reads
-> `_KEY` and ignores the old one. The module's default was also changed from the
-> template's `"boilerplate"` to `"flexlayout"` — left as shipped, this app's
-> rollups would have overwritten the boilerplate's rows at the hub.
+> `_KEY` and ignores the old one.
+>
+> **Where the default now lives.** This repo used to edit the reporter's own
+> fallback from the template's `"boilerplate"` to `"flexlayout"` — which is
+> exactly what made the file a local fork that could no longer be re-synced,
+> and it silently skipped the presence half of the module for a release.
+> `lib/satellite_reporter.py` is now **byte-identical** to the boilerplate's
+> (`shasum` against it is the check), so its fallback says `"boilerplate"`
+> again, and the identity claim moved to a marked FORK POINT at the top of
+> `run.py`:
+>
+> ```python
+> os.environ.setdefault("SATELLITE_APP_KEY", "flexlayout")
+> ```
+>
+> before any hub-facing import. `setdefault`, so the real environment value
+> above always wins; the line only closes the unset gap. Between the two there
+> is no path on which this app's traffic files under the template's hub row.
 
 **`CROSS_APP_WEBHOOK_SECRET` is the one value you must set by hand** — it is
 `sync: false` in `render.yaml` precisely so it never lands in the repo. Without
@@ -135,26 +160,78 @@ Two more routes support this:
   reaches the server. Without this beacon every session would be reported as
   single-page and `median_session_s` would always be null.
 
-### No authentication
+### The interactive gate (shipped DARK)
 
-Unlike `leaflet.2plot.dev`, this site has **no Clerk auth** and no page-visibility
-control board. Every documentation page is public, so none of the `CLERK_*`
-satellite variables apply here.
+As of the gate-wave pass this site carries the network's full sign-in stack —
+`lib/auth.py`, `lib/access.py`, `lib/gate_layouts.py`, `lib/agent_key.py`, the
+`/admin/control-board` page — and it is **switched off**. `PAGE_DEFAULT_TIER`
+is declared explicitly as `public`, so every documentation page is open while
+the enforcement wiring is live and verifiable. Flipping that one variable to
+`auth` gates every page that does not pin its own tier; flipping it back is the
+whole rollback, with no code revert anywhere.
 
-## 4. Free-tier caveats
+Three things follow from that, and each is a thing to check rather than assume:
 
-- The service **sleeps after ~15 minutes idle** and cold-starts on the next
-  request (several seconds for the first visitor).
-- The container filesystem is **ephemeral**. The analytics ledger
-  (`visitor_analytics.json`, written by `lib/analytics_tracker.py`) lives there,
-  so an eviction costs whatever traffic had not yet been reported. `SATELLITE_REPORT_INTERVAL_S=1800` halves that
-  window; the reporter also only POSTs when the day's numbers actually changed,
-  so an idle day costs zero requests.
+- **The Clerk block matters even while the gate is dark.** `dash-clerk-auth` is
+  vendored (`vendor/dash_clerk_auth-1.0.5.tar.gz`) and installed in every
+  image. It registers a Dash *entry-point hook*, so `Dash(...)` imports it
+  during construction whether or not the `CLERK_*` keys are set — which is why
+  `requirements.txt` also floors `clerk-backend-api>=7.0.0,<8` and
+  `cryptography>=50.0.0`. Without those the site does not boot.
+- **`/api/agent-key` is mounted always** and answers `204` to anyone without a
+  session. It turns a signed-in browser's Clerk session into a portable `?key=`
+  for copied `llms.txt` URLs — those get pasted into assistants, which fetch
+  with no cookie.
+- **`/admin/control-board` fails CLOSED.** Every other tier degrades to public
+  when Clerk is unavailable, because documentation must never brick over a
+  missing credential. Anything that can change what the site exposes must not.
+  Set `ALLOW_UNGATED_ADMIN=1` to work on it locally.
+
+Three boot lines are the acceptance check for a deploy, and two of them are
+**absences**:
+
+```
+[flexlayout] interactive gate: default tier 'public', 0 non-public page(s), ...
+```
+
+...present, and naming `dash-improve-my-llms 2.6.1`; **no** `[visibility]`
+warning (the `/var/data` disk is really mounted and `PAGE_VISIBILITY_FILE`
+really reached the service); **no** `[auth]` warning
+(`CLERK_SATELLITE_SIGN_IN_REDIRECT` is set and is an absolute URL — it is a
+destination, not a flag, and both an unset and a non-URL value fail silently in
+the browser).
+
+See `.env.example` for every variable, and `render.yaml` for which shared env
+group delivers it.
+
+## 4. Plan and persistence
+
+The service runs on Render's **starter** plan with a **1 GB disk mounted at
+`/var/data`** (`render.yaml` declares both; the owner attached the disk
+fleet-wide on 2026-08-21). That combination is what the rest of this document
+assumes:
+
+- **No sleeping.** Starter does not idle out, so there is no cold start for the
+  first visitor after a quiet hour — which also means the hub's hourly
+  `/healthz` sweep measures the app rather than a container waking up.
+- **Two files survive deploys**, both on the disk: the analytics ledger
+  (`TRAFFIC_ANALYTICS_FILE`) and the control-board override store
+  (`PAGE_VISIBILITY_FILE`). This matters more than it looks: the hub takes the
+  **last** report for a given `(app, date)`, so on an ephemeral filesystem a
+  mid-day deploy wiped the ledger and the next report overwrote the day's real
+  total with whatever had accrued since the restart.
+- **A declaration attaches nothing.** `render.yaml` declaring the disk is not
+  the same as the disk existing — the pilot host ran for weeks that way, with
+  the app quietly `mkdir`-ing `/var/data` on the container filesystem and every
+  deploy wiping both files. Verify in the dashboard's Disks tab, or trust the
+  boot guard: a `[visibility]` warning names exactly which half is missing, and
+  its absence is the pass.
+- **Accepted trade-off:** a disk-backed service restarts with a brief blip on
+  deploy instead of overlapping instances. Correct for a docs site — and it is
+  why `cd.yml` waits for `/healthz` to report *this run's commit* rather than
+  merely a 200.
 - 512 MB RAM. `WEB_CONCURRENCY=2` (2 gunicorn workers × 4 threads) fits
   comfortably; drop to `1` if you see OOM restarts.
-
-Moving to `starter` or higher removes the sleep. Add a persistent disk if the
-traffic ledger must survive deploys.
 
 ## 5. Running the production image locally
 

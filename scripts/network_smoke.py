@@ -18,9 +18,12 @@ standard; if a check here is wrong, it is wrong on twenty hosts.
 What a satellite is to the network is what the battery proves: that it states
 its identity, that its agent-facing document surfaces are real, that it runs
 the intended dash-improve-my-llms artifact, and that no owner-only surface
-leaks. A satellite holds no key material, so unlike the hub's copy of this
-script there is no agent-key API to fail closed — the corresponding check
-here is that this host's llms.txt points *back* at the hub that does.
+leaks. A satellite holds no key material of its own, so unlike the hub's copy of
+this script there is no key to mint — but since the gate-wave pass this host
+does expose `/api/agent-key`, which turns a browser's Clerk session into a
+portable `?key=` for copied llms.txt URLs. It must answer 204 to anyone
+without a session, which is checked below; the other half of the chain is
+that this host's llms.txt points *back* at the hub that holds the authority.
 
 Every UA this script sends carries the internal-traffic token (the analytics
 point of truth — https://2plot.ai/docs/satellite-analytics, "Internal
@@ -70,11 +73,14 @@ SITE_H1 = "# flexlayout-dash — resizable panel layouts for Dash"
 DEFAULT_BASE_URL = "http://localhost:8055"
 
 # Owner-only surfaces that must 404 their llms.txt to an anonymous reader.
-# This template ships no hidden pages, so the list is a canary rather than a
-# census: `/admin` is what a fork will add first, and `mark_hidden("/admin")`
-# has to keep working. A fork adds its own paths here in the same change that
-# marks them hidden.
+# The first entry is a real page on this host as of the gate-wave pass:
+# pages/control_board.py calls mark_hidden("/admin/control-board"), which
+# keeps it out of /sitemap.xml, out of the MCP resource set, out of the
+# prerender, and 404s crawler requests — this is the outside proof that the
+# call is still there. The other two are canaries for paths a future owner
+# surface would take. Add a path here in the SAME change that marks it hidden.
 HIDDEN_DOC_PATHS = (
+    "/admin/control-board/llms.txt",
     "/admin/llms.txt",
     "/analytics/llms.txt",
 )
@@ -183,6 +189,21 @@ def satellite_checks(base: str) -> None:
             status, _, _ = get(path)
             expect(status == 404, f"{path} {status} (owner surface leaked)")
 
+    def agent_key_closed_to_anonymous():
+        # 204, not 200-with-empty-body and not 401: the browser JS in
+        # assets/llms_copy.js treats anything but 200 as "no key" and copies
+        # the plain URL, so a 204 is the quiet, correct answer for a visitor
+        # with no session. A 200 carrying a key here would mean this host is
+        # minting authority for anonymous callers — the one failure on this
+        # surface that matters, and it is invisible from the browser.
+        status, headers, text = get("/api/agent-key")
+        expect(status == 204, f"/api/agent-key {status} for an anonymous caller")
+        expect(not text.strip(), "/api/agent-key returned a body to an anonymous caller")
+        cache = (headers.get("cache-control") or "").lower()
+        if cache:
+            expect("no-store" in cache,
+                   f"/api/agent-key Cache-Control={cache!r} — a key response must never be cached")
+
     def robots_artifact_fingerprint():
         # pip metadata is invisible from outside, so the robots.txt crawler
         # split is how a live host is proven to run the intended package:
@@ -253,6 +274,7 @@ def satellite_checks(base: str) -> None:
         ("llms_txt_names_the_hub", llms_txt_names_the_hub),
         ("page_llms_nav", page_llms_nav),
         ("hidden_pages_404", hidden_pages_404),
+        ("agent_key_closed_to_anonymous", agent_key_closed_to_anonymous),
         ("robots_artifact_fingerprint", robots_artifact_fingerprint),
         ("sitemap_absolute_and_on_this_host", sitemap_absolute_and_on_this_host),
         ("crawler_gets_prose", crawler_gets_prose),

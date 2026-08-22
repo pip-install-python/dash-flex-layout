@@ -41,14 +41,14 @@ from typing import Any, Dict, List
 
 # Only list hosts that are actually live. A directory entry pointing at a
 # subdomain with no site is a dead link an agent will follow once and then
-# distrust the rest of the list for. muicharts.2plot.dev has no docs site yet —
-# add it in the same change that ships it, not before.
-#
-# flexlayout.2plot.dev IS listed below, added in the change that ships it (this
-# one). It is inert in THIS copy: `peers_for()` strips the running app from its
-# own output, so this site never advertises itself. The entry matters when this
-# file is next synced across the fleet — that is what makes the other
-# satellites link here.
+# distrust the rest of the list for. The full docs fleet went live on paid
+# hosting 2026-08-19/20 — muicharts, flexlayout and llms joined in that
+# window (the drift sweep of 2026-08-20 found seven different versions of
+# this list across nine repos; this copy is the canonical one and the fleet
+# syncs FROM here, verbatim). excalidraw.2plot.dev and modelviewer.2plot.dev
+# were deliberately absent until they deployed; both went live in the gate
+# wave (2026-08-21/22, verified via /healthz build identity) and joined in
+# 1.6.5. The fleet re-copy carries them to every satellite's directory.
 PEERS: List[Dict[str, str]] = [
     {
         "name": "2plot.ai",
@@ -76,6 +76,21 @@ PEERS: List[Dict[str, str]] = [
         "description": "MUI X Scheduler — calendars and event scheduling for Dash.",
     },
     {
+        "name": "dash-mui-charts",
+        "url": "https://muicharts.2plot.dev",
+        "description": "MUI X charts, tree views and time pickers for Dash.",
+    },
+    {
+        "name": "flexlayout-dash",
+        "url": "https://flexlayout.2plot.dev",
+        "description": "IDE-style dockable, resizable and floatable window panels.",
+    },
+    {
+        "name": "dash-improve-my-llms",
+        "url": "https://llms.2plot.dev",
+        "description": "The AI/LLM and SEO package every site in this network is built on.",
+    },
+    {
         "name": "dash-flows",
         "url": "https://flows.2plot.dev",
         "description": "Node-graph editors built on React Flow.",
@@ -96,18 +111,23 @@ PEERS: List[Dict[str, str]] = [
         "description": "Email composition and delivery components.",
     },
     {
-        "name": "flexlayout-dash",
-        "url": "https://flexlayout.2plot.dev",
-        "description": "IDE-style dockable, resizable and floatable window panels.",
+        "name": "dash-model-viewer",
+        "url": "https://modelviewer.2plot.dev",
+        "description": "3D model viewer with AR support, built on Google's model-viewer.",
+    },
+    {
+        "name": "dash-excalidraw",
+        "url": "https://excalidraw.2plot.dev",
+        "description": "Excalidraw virtual whiteboard and sketching canvas.",
     },
 ]
 
+# pip-install-python.com is deliberately NOT here: the domain is retired
+# network-wide (the fleet's retire-pip-install-python-domain sweep), and
+# leaflet's test_social_card pins its absence. A directory that keeps
+# pointing agents at a retired origin re-teaches them the identity the
+# network spent a release unlearning.
 AFFILIATED: List[Dict[str, str]] = [
-    {
-        "name": "Pip Install Python",
-        "url": "https://pip-install-python.com",
-        "description": "The original component documentation site.",
-    },
     {
         "name": "Pirate's Bargain",
         "url": "https://piratesbargain.com",

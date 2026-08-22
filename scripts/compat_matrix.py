@@ -110,7 +110,15 @@ def make_venv(version: str) -> Path | None:
 
     reqs = WORK_DIR / f"reqs-{version}.txt"
     reqs.write_text(requirements_without_dash())
-    r = run([str(py), "-m", "pip", "install", "-r", str(reqs), "--quiet"])
+    # cwd=PROJECT_ROOT is load-bearing, not tidiness: requirements.txt installs
+    # the vendored dash-clerk-auth from the RELATIVE path
+    # `./vendor/dash_clerk_auth-<v>.tar.gz`, and pip resolves relative
+    # requirement paths against the process working directory — not against the
+    # requirements file, which lives in .compat/. Run this from anywhere but
+    # the repo root without it and pip reports the missing path as a soft
+    # warning before failing on something that reads like a network error.
+    r = run([str(py), "-m", "pip", "install", "-r", str(reqs), "--quiet"],
+            cwd=str(PROJECT_ROOT))
     if r.returncode:
         log(f"requirements install failed: {r.stderr.strip()[:400]}")
         return None

@@ -1,6 +1,6 @@
 ---
 name: "Home"
-description: "IDE-style dockable, resizable and floatable window panels for Plotly Dash — drag tabs between tabsets, split panes, collapse edge sidebars, and pop tabs into their own window."
+description: "IDE-style dockable, resizable and floatable window panels for Plotly Dash — drag tabs between tabsets, split panes, and pop tabs out."
 endpoint: "/"
 package: flexlayout_dash
 category: "Start here"

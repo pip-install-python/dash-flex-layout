@@ -40,6 +40,14 @@ SECRET_ENV_KEYS = (
     "CROSS_APP_WEBHOOK_SECRET",
     "SATELLITE_TRAFFIC_URL",
     "NETWORK_BULLETIN_URL",
+    # Clerk: the gate must be provably dormant without keys. lib/auth.clerk_enabled
+    # needs all three of SECRET/PUBLISHABLE/SIGN_IN plus an importable package, so
+    # emptying them here is what makes "docs fall open without Clerk" a tested
+    # property rather than an assumption about the developer's .env.
+    "CLERK_SECRET_KEY", "CLERK_PUBLISHABLE_KEY", "CLERK_SIGN_IN_URL",
+    "CLERK_SIGN_UP_URL", "CLERK_FRONTEND_API", "CLERK_WEBHOOK_SECRET",
+    "CLERK_IS_SATELLITE", "CLERK_SATELLITE_DOMAIN", "SESSION_SECRET",
+    "ADMIN_EMAILS",
 )
 for _key in SECRET_ENV_KEYS:
     os.environ[_key] = ""
@@ -50,6 +58,10 @@ for _key in SECRET_ENV_KEYS:
 # the next hourly rollup a developer's local run happens to send.
 _TMP_STATE = tempfile.mkdtemp(prefix="flexlayout-tests-")
 os.environ["TRAFFIC_ANALYTICS_FILE"] = os.path.join(_TMP_STATE, "visitor_analytics.json")
+# The control board's override store. Same reason, sharper edge: without this
+# the suite's toggles would be written to whatever PAGE_VISIBILITY_FILE points
+# at — in a developer shell, the real one.
+os.environ["PAGE_VISIBILITY_FILE"] = os.path.join(_TMP_STATE, "page_visibility.json")
 # Behind Cloudflare in production; in tests an outbound ip-api.com lookup per
 # hit would make the suite depend on a third party being up.
 os.environ["ANALYTICS_GEO_LOOKUP"] = "0"

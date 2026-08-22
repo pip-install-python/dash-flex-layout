@@ -68,7 +68,7 @@ def _meta(html: str, value: str) -> list[str]:
 
 
 def test_the_og_image_is_never_empty(client, page_paths):
-    for path in page_paths[:8]:
+    for path in [p for p in page_paths if not p.startswith("/admin")][:8]:
         images = _meta(client.get(path).text, "og:image")
         assert images, f"{path} declares no og:image at all"
         assert all(src.strip() for src in images), (
@@ -78,7 +78,7 @@ def test_the_og_image_is_never_empty(client, page_paths):
 
 def test_the_image_is_declared_exactly_once(client, page_paths):
     """The duplicate-tag regression, and the reason index.html stops at alt."""
-    for path in page_paths[:8]:
+    for path in [p for p in page_paths if not p.startswith("/admin")][:8]:
         html = client.get(path).text
         assert len(_meta(html, "og:image")) == 1, (
             f"{path} has {_meta(html, 'og:image')} — a scraper picks one, and "
@@ -168,7 +168,13 @@ def test_the_declared_ratio_suits_a_large_image_card():
 
 
 def test_the_twitter_card_is_a_large_image(client):
-    assert _meta(client.get("/").text, "twitter:card") == ["summary_large_image"]
+    html = client.get("/").text
+    # Every declaration agrees on the value, and the one Twitter can read is
+    # present: its parser predates the OG convention and reads name=, never
+    # property=. Dash's property= copy is unavoidable dead weight; the name=
+    # tag in index.html is the functional declaration.
+    assert set(_meta(html, "twitter:card")) == {"summary_large_image"}
+    assert 'name="twitter:card"' in html
 
 
 def test_no_meta_tag_dash_emits_is_also_declared_statically(client):
@@ -177,10 +183,15 @@ def test_no_meta_tag_dash_emits_is_also_declared_statically(client):
     Dash emits all of these per page. A static copy in the template makes two
     of each, and the static one describes the SITE where Dash's describes the
     PAGE — so the duplicate is both redundant and the less accurate of the two.
+
+    `twitter:card` is the deliberate exception since the 2.5.x SEO standard:
+    Dash declares it with `property=`, which Twitter does not read, so the
+    static `name=` copy in index.html is not a duplicate — it is the only
+    declaration any scraper can see, and both carry the same value.
     """
     html = client.get("/").text
     for tag in ("description", "og:type", "og:title", "og:description",
-                "og:image", "twitter:card", "twitter:url", "twitter:title",
+                "og:image", "twitter:url", "twitter:title",
                 "twitter:description", "twitter:image"):
         found = _meta(html, tag)
         assert len(found) <= 1, f"{tag} is declared {len(found)} times: {found}"

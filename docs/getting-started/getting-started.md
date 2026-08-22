@@ -3,6 +3,7 @@ name: Getting Started
 description: Build your first dockable layout with flexlayout-dash.
 endpoint: /getting-started
 icon: mdi:rocket-launch-outline
+lastmod: 2026-08-01
 ---
 
 .. llms_copy::Getting Started

@@ -25,7 +25,11 @@
 # Dash version under test instead of resolving to the newest one. Keep the
 # marker on the same line as the pin.
 dash>=4.2.0  # COMPAT-MATRIX: dash
-dash-mantine-components>=2.7.0
+# >=2.8.0 is a NETWORK FLOOR, not a preference: on 2.7.0 the standard mobile
+# navigation drawer (components/navbar.create_navbar_drawer) renders as a
+# floating card from byte-identical props instead of the docked full-height
+# panel. Nothing errors — it just looks wrong on every phone.
+dash-mantine-components>=2.8.0
 dash-iconify>=0.1.2
 
 # Markdown-driven docs engine (directives: toc / exec / source / kwargs).
@@ -76,7 +80,19 @@ pydantic>=2.3.0
 #          crawler document, /favicon.ico answered with a redirect instead
 #          of the app shell, and a prerender that no longer clobbers the
 #          browser's per-page <title>.
-dash-improve-my-llms[flask]>=2.5.1
+#   2.6.0  truthful sitemaps: `lastmod=` on register_page_metadata is finally
+#          EMITTED rather than swallowed into **kwargs and ignored, so the
+#          dates docs/*/*.md declare are the dates crawlers see. Below this
+#          every <lastmod> reverts to an invented build date. Also: icon
+#          autodiscovery, and JSON-LD publisher `logo`.
+#   2.6.1  the VISIBLE prerender. 2.6.0 shipped the prerender block with a
+#          literal `hidden` attribute, so every visibility-respecting
+#          consumer (HTML-to-text extractors, plausibly crawler content
+#          weighting) read "Loading..." where the page's prose should be —
+#          the outside-audit finding of 2026-08-22, and what THIS HOST was
+#          serving that morning. run.py enforces this floor at boot and
+#          tests/test_pages.py pins the visible shape.
+dash-improve-my-llms[flask]>=2.6.1
 
 # Default backend + production WSGI server. gunicorn 21.x carried two
 # request-smuggling CVEs (CVE-2024-6827, CVE-2024-1135); >=23 is the network
@@ -90,9 +106,41 @@ gunicorn>=23.0
 python-dotenv>=1.0.0
 
 # 2plot network client calls (lib/ad_client.py, lib/analytics_tracker.py,
-# lib/satellite_reporter.py). All are dormant without their env keys, but the
-# imports are unconditional, so requests must be installed either way.
+# lib/hub_client.py, lib/satellite_reporter.py). All are dormant without their
+# env keys, but the imports are unconditional, so requests must be installed
+# either way.
 requests>=2.31.0
+
+# ---------------------------------------------------------------------------
+# Clerk satellite auth — the interactive sign-in gate (lib/auth.py)
+# ---------------------------------------------------------------------------
+# VENDORED, not fetched: dash-clerk-auth is not on PyPI, so the release tarball
+# is committed under vendor/ and installed from the working tree. Network
+# floor is 1.0.5 (sha256 a2f9062e15a69fc79deeaf76fcf1380907a961978db558b2aa227572cb2b74f3),
+# the release that adds the return-trip stale-gate reconciliation and the
+# shared no-loop marker; 1.0.2's Sign Out never revoked the server session, so
+# the signed __dca_identity cookie kept serving gated pages for up to 7 days.
+#
+# THE DOCKERFILE MUST `COPY vendor/` BEFORE THIS FILE'S INSTALL LAYER. If it
+# doesn't, pip reports the missing path as a SOFT WARNING and then dies
+# seconds later on an OSError that reads like a registry outage — a fork lost
+# an afternoon to exactly that.
+#
+# LOAD-BEARING even when Clerk is switched off: dash-clerk-auth registers a
+# Dash *entry-point hook*, so `Dash(...)` imports it during construction
+# whether or not this app's code ever does. With clerk-backend-api missing,
+# that import raises and the whole site fails to boot before any of lib/auth's
+# guards can degrade gracefully — measured 2026-08-22 while porting this
+# stack. So the two floors below are not optional extras; they are what makes
+# the vendored package importable at all.
+./vendor/dash_clerk_auth-1.0.5.tar.gz
+
+# SDK 5.x capped `cryptography` below the fixes for four advisories, so a host
+# pinning `clerk-backend-api<6` re-reports all four to pip-audit forever.
+# 7.x is the network floor; <8 because the major is where this SDK breaks its
+# auth surface (1.0.3's FastAPI endpoints 422'd every POST).
+clerk-backend-api>=7.0.0,<8
+cryptography>=50.0.0
 
 # The component being documented is NOT listed: it lives in this repo at
 # flexlayout_dash/, right beside run.py, so the live `.. exec::` examples

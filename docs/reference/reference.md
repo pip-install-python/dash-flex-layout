@@ -3,6 +3,7 @@ name: Component Reference
 description: Every prop on DashFlexLayout and Tab, plus the model schema.
 endpoint: /reference
 icon: mdi:book-open-variant
+lastmod: 2026-08-01
 ---
 
 .. llms_copy::Component Reference

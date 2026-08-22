@@ -3,6 +3,7 @@ name: Callbacks
 description: Read layout state and drive content from Dash callbacks.
 endpoint: /callbacks
 icon: mdi:function-variant
+lastmod: 2026-08-01
 ---
 
 .. llms_copy::Callbacks

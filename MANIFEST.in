@@ -78,6 +78,10 @@ prune scripts
 prune src
 prune tests
 prune github_assets
+# The vendored dash_clerk_auth release tarball. It belongs to the DOCS SITE's
+# sign-in gate (requirements.txt installs it from here); shipping a 126 KB
+# third-party sdist inside the flexlayout-dash wheel would be absurd.
+prune vendor
 exclude run.py
 exclude requirements.txt
 exclude render.yaml

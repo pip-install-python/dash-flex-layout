@@ -10,11 +10,23 @@
 
          `dash.register_page()` makes Dash generate `description`, `og:type`,
          `og:title`, `og:description`, `og:image` and the full `twitter:*` set
-         per page (dash/_pages.py), and dash-improve-my-llms 2.3.4's prerender
-         owns the canonical link and per-page <title> on the CRAWLER path.
+         per page (dash/_pages.py), and dash-improve-my-llms's prerender owns
+         the canonical link and the per-page title element on the CRAWLER path.
          Anything re-declared here would ship doubled — and the static copy
          describes the SITE where Dash's describes the PAGE, so the duplicate
          is both redundant and the less accurate of the two.
+
+         NEVER SPELL THE TITLE TAG IN ANGLE BRACKETS ANYWHERE IN A COMMENT IN
+         THIS FILE. dash-improve-my-llms locates the element with a
+         dot-matches-newline regex anchored on the opening and closing tags and
+         rewrites the FIRST match. A comment that names the tag therefore
+         becomes the anchor, and everything from there to the real closing tag
+         is replaced by the rewritten title and vanishes from the served page.
+         This file did exactly that until 2026-08-22: the line above used to
+         write the tag out, and every page this site served was missing its
+         `charset` and `viewport` declarations as a result — invisible in the
+         source file, visible only in the served bytes. Say "title element" in
+         words. tests/test_config.py pins both halves.
 
          WHY THE FILE EXISTS AT ALL (it was deleted once, 2026-07-31, on the
          theory that the prerender covers OG): the prerender path is taken by
@@ -29,8 +41,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{%title%}</title>
 
-    <meta name="keywords" content="Python Dash, flexlayout, dockable panels, resizable layout, IDE layout, drag and drop tabs, Plotly Dash, Dash components, FlexLayout-React">
+    <!-- The SITE's own keyword set. The template default (its "documentation,
+         Dash Mantine Components, markdown docs" string) is the abandoned-fork
+         tell an outside audit flags: a satellite that never edited it is
+         announcing that nobody looked. These are this package's terms. -->
+    <meta name="keywords" content="Python Dash, flexlayout, dockable panels, resizable layout, IDE layout, drag and drop tabs, split panes, pop-out windows, docking layout, Plotly Dash, Dash components, FlexLayout-React">
     <meta name="author" content="Pip Install Python LLC">
+
+    <!-- Complements the title element for the crawlers that read it. NOT a
+         duplicate of anything Dash emits: Dash builds og:title / twitter:title
+         per page, never a bare `name="title"`.
+
+         The per-page `description` is Dash's, from each doc's frontmatter —
+         which is why there is no static description tag here. docs/home/home.md
+         carries the front door's, kept under the ~155 characters Google will
+         show before it truncates. -->
+    <meta name="title" content="flexlayout-dash — resizable panel layouts for Dash">
 
     <!-- og:url and og:site_name are genuinely absent from Dash's set. og:url
          is static, so it says "/" on every page; the prerender serves the
@@ -50,6 +76,18 @@
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="flexlayout-dash — resizable panel layouts for Dash">
+
+    <!-- TWITTER CARDS. Dash emits twitter:card, twitter:url, twitter:title,
+         twitter:description and twitter:image per page — with `property=`.
+         Twitter reads `name=`: its parser predates the Open Graph convention
+         and never adopted it. So Dash's five are invisible to the one platform
+         they exist for, and these two are the ones actually read: the card type
+         declared with name=, and the alt text Dash omits entirely. The rest
+         (title, description, image) falls back to the og:* set, which Twitter
+         does read. Measured 2026-08-14: without the card-type line no page on
+         the network declared a card type any scraper could see, so every share
+         rendered as a small thumbnail instead of the 1200x630 card. -->
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image:alt" content="flexlayout-dash — resizable panel layouts for Dash">
 
     <!-- The installable-app surface. Every icon here is generated from one
@@ -66,9 +104,195 @@
     <link rel="manifest" href="/assets/favicon/site.webmanifest">
     <meta name="theme-color" content="#4c6ef5">
 
+    <!-- =====================================================================
+         URL SYNC ON SPA NAVIGATION
+
+         This is a single-page app: Dash routes through history.pushState,
+         which fires no event, so tags keep advertising the URL the visitor
+         LANDED on for the rest of the session. Three go stale, each for a
+         different reason:
+
+           og:url        static in this file, so it says "/" on every page;
+           twitter:url   Dash builds it from request.url — correct on arrival,
+                         then frozen there;
+           canonical     dash-improve-my-llms injects it per page server-side,
+                         which is right on arrival and wrong after one
+                         client-side route change.
+
+         This script CORRECTS tags that exist and never creates one — the
+         canonical is the package's to own (a second, hard-coded canonical
+         would make a conflicting pair, which is treated as no signal at all).
+         Google runs JS and sees the corrected values; social scrapers do NOT,
+         which is why they are served the accurate per-page prerender instead.
+
+         The origin is read from the og:url tag above rather than hard-coded a
+         second time — one value to change. Deliberately NOT location.origin: a
+         platform's generated hostname keeps resolving after a custom domain is
+         attached, and hits on it must consolidate onto the custom domain
+         rather than compete with it.
+         ================================================================== -->
+    <script>
+        (function () {
+            var declared = document.querySelector('meta[property="og:url"]');
+            var ORIGIN;
+            try {
+                ORIGIN = new URL(declared.content).origin;
+            } catch (e) {
+                return;  // no og:url to learn from: leave every tag alone
+            }
+
+            function sync() {
+                var path = location.pathname.replace(/\/+$/, '') || '/';
+                var href = ORIGIN + (path === '/' ? '/' : path);
+
+                // querySelectorAll, not querySelector: og:url and twitter:url
+                // may each appear once from this template and once from the
+                // package's prerender block, and both copies must agree.
+                document.querySelectorAll(
+                    'meta[property="og:url"], meta[property="twitter:url"], ' +
+                    'link[rel="canonical"]'
+                ).forEach(function (el) {
+                    if (el.tagName === 'LINK') { el.href = href; }
+                    else { el.setAttribute('content', href); }
+                });
+            }
+
+            sync();
+
+            ['pushState', 'replaceState'].forEach(function (method) {
+                var original = history[method];
+                history[method] = function () {
+                    var result = original.apply(this, arguments);
+                    sync();
+                    return result;
+                };
+            });
+            window.addEventListener('popstate', sync);
+        })();
+    </script>
+
+    <!-- =====================================================================
+         STRUCTURED DATA (schema.org)
+
+         The BROWSER document's half of this site's identity. The crawler
+         document gets its own JSON-LD from dash-improve-my-llms, built from
+         run.py's `configure_seo(publisher=, same_as=)` and each page's
+         `schema_type` — content may differ between the two documents,
+         identity may not, so these two blocks must keep saying the same
+         things about the same product.
+
+         Every value below is THIS package's. A satellite that ships the
+         template's SoftwareApplication block tells Google it is the
+         documentation boilerplate, which is how a fork disappears from
+         search for its own name.
+         ================================================================== -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Pip Install Python LLC",
+        "description": "Open-source Dash component libraries and the documentation system they are published with.",
+        "url": "https://2plot.ai",
+        "logo": "https://flexlayout.2plot.dev/assets/favicon/favicon-512.png",
+        "sameAs": [
+            "https://github.com/pip-install-python",
+            "https://www.youtube.com/@2plotai",
+            "https://2plot.dev",
+            "https://www.linkedin.com/in/austin-k-274140161/"
+        ],
+        "contactPoint": {
+            "@type": "ContactPoint",
+            "email": "austin@pip-install-python.com",
+            "contactType": "customer support"
+        }
+    }
+    </script>
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "flexlayout-dash",
+        "alternateName": "flexlayout-dash \u2014 resizable panel layouts for Dash",
+        "description": "IDE-style dockable, resizable and floatable window panels for Plotly Dash. Wraps FlexLayout-React with portal-based rendering, so drag-and-drop tabs, split panes, collapsible edge borders and pop-out windows all keep ordinary Dash callbacks working.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "url": "https://flexlayout.2plot.dev",
+        "license": "https://opensource.org/licenses/MIT",
+        "codeRepository": "https://github.com/pip-install-python/dash-flex-layout",
+        "downloadUrl": "https://pypi.org/project/flexlayout-dash/",
+        "installUrl": "https://pypi.org/project/flexlayout-dash/",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Organization",
+            "name": "Pip Install Python LLC",
+            "url": "https://2plot.ai"
+        },
+        "softwareVersion": "2.0.0",
+        "programmingLanguage": "Python"
+    }
+    </script>
+
+    <!-- =====================================================================
+         LLM DISCOVERY
+
+         Where an agent that landed on the browser document should go for the
+         prose. /page.json and /architecture.txt were removed in
+         dash-improve-my-llms 2.0 (Dash 4.3's MCP server covers structured
+         introspection) — pointing agents at them advertised two 404s.
+         ================================================================== -->
+    <meta name="llms-txt" content="https://flexlayout.2plot.dev/llms.txt">
+    <meta name="llms-architecture" content="https://flexlayout.2plot.dev/sitemap.xml">
+    <meta name="llms-github-repo" content="https://github.com/pip-install-python/dash-flex-layout">
+
     {%metas%}
     {%favicon%}
     {%css%}
+
+    <!-- =====================================================================
+         NO-JAVASCRIPT FALLBACK
+
+         What a JS-less consumer gets. dash-improve-my-llms 2.6.1's prerender
+         already puts each page's real prose in the body VISIBLY (2.6.0 shipped
+         it `hidden`, which is the floor run.py enforces) — this block is the
+         belt to that braces, and the place the machine surfaces are named for
+         anyone reading the raw document.
+         ================================================================== -->
+    <noscript>
+        <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto; line-height: 1.6;">
+            <h1>flexlayout-dash — resizable panel layouts for Dash</h1>
+            <p><strong>The interactive dock demos on this site need JavaScript.</strong>
+               The documentation itself does not — every page is available as plain text below.</p>
+
+            <h2>For AI assistants and plain-text readers</h2>
+            <ul style="margin: 20px 0;">
+                <li><a href="https://flexlayout.2plot.dev/llms.txt"><strong>llms.txt</strong></a> — every page's prose, plus the cross-host network directory</li>
+                <li><a href="https://flexlayout.2plot.dev/llms-small.txt"><strong>llms-small.txt</strong></a> — a compact briefing</li>
+                <li><a href="https://flexlayout.2plot.dev/llms-full.txt"><strong>llms-full.txt</strong></a> — the whole corpus in one fetch</li>
+                <li><a href="https://flexlayout.2plot.dev/getting-started/llms.txt"><strong>&lt;page&gt;/llms.txt</strong></a> — one page on its own</li>
+                <li><a href="https://flexlayout.2plot.dev/sitemap.xml"><strong>sitemap.xml</strong></a> — every URL, with real last-modified dates</li>
+                <li><a href="https://flexlayout.2plot.dev/robots.txt"><strong>robots.txt</strong></a> — crawler instructions</li>
+            </ul>
+
+            <h2>What the package does</h2>
+            <ul>
+                <li>Dockable, resizable, floatable window panels for Plotly Dash</li>
+                <li>Drag tabs between tabsets; split, nest and maximize panes</li>
+                <li>Collapsible left / right / bottom edge borders</li>
+                <li>Pop a tab out into its own browser window</li>
+                <li>Portal-based rendering, so ordinary Dash callbacks keep working</li>
+                <li>Follows the Mantine light/dark colour scheme automatically</li>
+            </ul>
+
+            <p><code>pip install flexlayout-dash</code> —
+               <a href="https://pypi.org/project/flexlayout-dash/">PyPI</a> ·
+               <a href="https://github.com/pip-install-python/dash-flex-layout">GitHub</a></p>
+        </div>
+    </noscript>
 </head>
 
 <body>

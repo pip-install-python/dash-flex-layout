@@ -16,6 +16,7 @@ Only the standard library, so it runs anywhere without an install step.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -209,6 +210,75 @@ def main(base: str) -> int:
 
     status, health, _ = fetch(f"{base}/healthz")
     check("/healthz responds 200", status == 200, f"got {status}")
+    try:
+        build = json.loads(health).get("build")
+    except Exception:
+        build = None
+    # Not fatal: the field is optional by contract and absent outside Render.
+    # It is printed because it is the only way, from outside, to tell WHICH
+    # build answered — cd.yml waits on exactly this value.
+    check("/healthz names the running build", bool(build),
+          "no `build` field — cannot tell which commit is serving "
+          "(RENDER_GIT_COMMIT unset, or a build predating the field)",
+          fatal=False)
+    if build:
+        print(f"    build: {build}")
+
+    # --- 1b. The prerender a BROWSER receives -----------------------------
+    # THE CHECK A PLAIN CURL CANNOT MAKE. Fetching with a default or crawler
+    # UA gets the separate crawler document; the universal prerender lives on
+    # the ordinary browser lane, and this is the only place its shape is
+    # measured against a real deployment.
+    #
+    # Three properties, and each has been wrong on a live host in this fleet:
+    #   present   — a UA-gated prerender serves browsers "Loading..." and
+    #               nothing else (an outside SEO audit read five hosts that
+    #               way, 2026-08-22);
+    #   VISIBLE   — dash-improve-my-llms <= 2.6.0 shipped the div with a
+    #               literal `hidden`, so every visibility-respecting text
+    #               extractor read "Loading..." even though the prose was
+    #               there. THIS HOST served that until the 2.6.1 floor, so
+    #               this check is its regression pin;
+    #   per-page  — the block must carry THIS page's prose, not the home
+    #               page's on every route.
+    print("\nPrerender (browser lane)")
+    prerender_routes = [f"{base}/"] + [u for u in page_urls if urlparse(u).path not in ("", "/")][:2]
+    for url in prerender_routes:
+        path = urlparse(url).path or "/"
+        _status, html, _ = fetch(url, BROWSER_UA)
+        div = re.search(r'<div id="dimll-prerender"[^>]*>', html)
+        check(f"prerender block present on {path}", bool(div),
+              "no #dimll-prerender for a browser — the universal lane is off or UA-gated")
+        if div:
+            check(f"prerender is VISIBLE on {path}", "hidden" not in div.group(0),
+                  f"{div.group(0)} — carries `hidden`; the dimll floor is >=2.6.1 for exactly this")
+        check(f"prerender hide script marked on {path}",
+              'data-dimll-prerender="1">document.getElementById' in html,
+              "the marked synchronous hide script is missing — JS browsers "
+              "would flash the prose before React mounts")
+        body = html.split("<main>", 1)[1].split("</main>", 1)[0] if "<main>" in html else ""
+        check(f"prerender carries prose on {path}", len(body) > 500,
+              f"only {len(body)} characters inside <main>")
+
+    # --- 1c. The person->agent handoff ------------------------------------
+    # /api/agent-key must be silent for anyone without a session. A 200
+    # carrying a key here would mean this host mints authority for anonymous
+    # callers — invisible from a browser, and the only failure on this
+    # surface that matters.
+    print("\nAgent key")
+    status, body, headers = fetch(f"{base}/api/agent-key")
+    check("/api/agent-key is 204 for an anonymous caller", status == 204, f"got {status}")
+    check("/api/agent-key returns no body to an anonymous caller", not (body or "").strip())
+
+    # --- 1d. Machine surfaces stay open ------------------------------------
+    # The 30-day crawl-demand window: whatever the interactive gate is set to,
+    # the corpus documents answer an anonymous agent with prose.
+    print("\nMachine surfaces (anonymous)")
+    for doc in ("/llms.txt", "/llms-small.txt", "/llms-full.txt"):
+        status, text, _ = fetch(f"{base}{doc}")
+        check(f"{doc} responds 200", status == 200, f"got {status}")
+        check(f"{doc} serves prose", len(text) > 400 and "Authentication required" not in text,
+              f"{len(text)} characters" + (" and reads as a gate card" if "Authentication required" in text else ""))
 
     # --- 2. Canonical host — the failure that deindexes a satellite --------
     print("\nCanonical tags")

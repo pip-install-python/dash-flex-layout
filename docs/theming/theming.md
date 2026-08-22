@@ -3,6 +3,7 @@ name: Theming
 description: Automatic Mantine light/dark integration.
 endpoint: /theming
 icon: mdi:palette-outline
+lastmod: 2026-08-01
 ---
 
 .. llms_copy::Theming

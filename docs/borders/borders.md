@@ -3,6 +3,7 @@ name: Borders & Sidebars
 description: Collapsible left, right, and bottom edge panels.
 endpoint: /borders
 icon: mdi:dock-left
+lastmod: 2026-08-01
 ---
 
 .. llms_copy::Borders & Sidebars

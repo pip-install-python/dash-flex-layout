@@ -8,14 +8,14 @@ import dash_mantine_components as dmc
 import frontmatter
 from dash_improve_my_llms import register_page_metadata
 from markdown2dash import Admonition, BlockExec, Divider, Image
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from lib.ad_client import inject_ad_into_aside
 # Local create_parser: markdown2dash renders **bold** / *italic* / ~~struck~~
 # as <p>, nesting a <p> inside the paragraph's own <p>. See lib/renderer.py.
 from lib.renderer import create_parser
 from lib.constants import OG_IMAGE_URL, PAGE_TITLE_PREFIX, NAME_CONTENT_MAP
-from lib import page_tiers
+from lib import gate_layouts, page_tiers, page_visibility
 from lib.directives.kwargs import Kwargs
 from lib.directives.llms_copy import LlmsCopy
 from lib.directives.source import SC
@@ -39,10 +39,32 @@ class Meta(BaseModel):
     category: Optional[str] = None
     icon: Optional[str] = None
     # Who may read this page: public | auth | admin | hidden. Absent means
-    # public — see lib/page_tiers.py for the tier model and why the default
-    # is open. This site wires no access control yet, so a declared tier is
-    # recorded (the 402 groundwork's instrumentation), never enforced.
+    # the deployment default (PAGE_DEFAULT_TIER, else public) — see
+    # lib/page_tiers.py for the tier model and why the default is open.
     tier: Optional[str] = None
+    # The second axis: does the machine twin (/<page>/llms.txt, crawler HTML,
+    # the prerender) stay open while the interactive page is gated? Absent
+    # defers to LLMS_PUBLIC_DEFAULT (unset = open — the data-window posture).
+    # Only meaningful on `auth` pages; see lib/page_tiers.get_llms_public.
+    llms_public: Optional[bool] = None
+    # schema.org @type for the crawler document's JSON-LD. Absent means
+    # TechArticle — every page here documents software, and "WebPage" (the
+    # package default) tells Google nothing it did not already know. The home
+    # page declares SoftwareApplication in run.py.
+    schema_type: Optional[str] = None
+    # Sitemap <lastmod>, YYYY-MM-DD, emitted VERBATIM by dash-improve-my-llms
+    # >= 2.6.0 — and omitted entirely when absent. Truth or silence: set it
+    # when the page's content genuinely changes (the frontmatter edit rides
+    # the same commit as the prose), never script it from file mtimes, which
+    # reset on every Docker build and would re-invent the daily-lie sitemap
+    # 2.6.0 exists to end. The validator exists because YAML parses a bare
+    # `lastmod: 2026-08-01` into datetime.date before pydantic ever sees it.
+    lastmod: Optional[str] = None
+
+    @field_validator("lastmod", mode="before")
+    @classmethod
+    def _lastmod_to_iso(cls, value):
+        return value.isoformat() if hasattr(value, "isoformat") else value
 
 
 _SOURCE_DIRECTIVE = re.compile(r'^\.\. source::(.+?)$', re.MULTILINE)
@@ -134,14 +156,20 @@ for file in files:
     # fail-silent either way, so it can never block page registration.
     inject_ad_into_aside(layout, metadata.endpoint)
 
-    # register with dash
+    # register with dash — the layout goes in behind the interactive gate.
+    # The tree is still built once, above; gated_layout only decides per
+    # render whether the visitor gets it or the sign-in/forbidden/404 card
+    # (lib/gate_layouts.py). With every tier public the verdict is a dict
+    # lookup that always says allow, so an ungated fork pays ~nothing.
     dash.register_page(
         metadata.name,
         metadata.endpoint,
         name=metadata.name,
         title=PAGE_TITLE_PREFIX + metadata.name,
         description=metadata.description,
-        layout=layout,
+        layout=gate_layouts.gated_layout(
+            metadata.endpoint, metadata.name, layout
+        ),
         category=metadata.category,
         icon=metadata.icon,
         # Dash emits og:image/twitter:image for EVERY page and writes
@@ -157,12 +185,35 @@ for file in files:
     # route that used to live in run.py and works across all three backends.
     # Record the declared tier before the prose is registered, so a gate can
     # never be applied later than the content it is meant to gate.
-    page_tiers.register(metadata.endpoint, metadata.tier)
+    #
+    # ONE declared value, TWO ledgers. The control board's row first —
+    # overrides written there win at resolution time (lib.access.local_tier),
+    # which is what makes a board toggle apply live. Then the network ledger:
+    # what the hub's tier ceiling compares against and what lib.access
+    # enforces underneath any override.
+    page_visibility.register_default(metadata.endpoint, metadata.name,
+                                     visibility=metadata.tier,
+                                     llms_public=metadata.llms_public)
+    page_tiers.register(metadata.endpoint, metadata.tier,
+                        llms_public=metadata.llms_public)
 
     expanded = _expand_source_directives(content)
+    # The full record, matching the dash.register_page call above. These two
+    # calls must never describe the same page differently: the thinner record
+    # here is exactly how the fleet shipped "flexlayout-dash | Theming" to
+    # browsers and a bare "Theming" to Google (the one bug behind every SEO
+    # defect measured across the network, 2026-08). title and image_url are
+    # read by dash-improve-my-llms 2.5.0+; older packages ignore them.
     register_page_metadata(
         path=metadata.endpoint,
         name=metadata.name,
         description=metadata.description,
+        title=PAGE_TITLE_PREFIX + metadata.name,
+        image_url=OG_IMAGE_URL,
+        schema_type=metadata.schema_type or "TechArticle",
+        # Pre-2.6 packages swallow this into **kwargs and ignore it (no
+        # TypeError — measured on 2.5.1); the floor in run.py guarantees
+        # >= 2.6.1, where a real date is emitted and None omits the tag.
+        lastmod=metadata.lastmod,
         llms_doc=_build_llms_doc(metadata.name, metadata.description, expanded, metadata.endpoint),
     )

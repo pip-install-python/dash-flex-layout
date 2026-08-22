@@ -28,6 +28,12 @@ import os
 #   - "Pip Install Python" is the byline (who made it), never the site name.
 SITE_BRAND = "flexlayout-dash — resizable panel layouts for Dash"
 
+# The network standard's spelling of the same value. `run.py` and the ported
+# tests read APP_TITLE; SITE_BRAND is this fork's older name and stays because
+# lib/, docs/ and tests/ already reference it. Derived, never retyped — two
+# spellings of one brand must not be able to drift.
+APP_TITLE = SITE_BRAND
+
 SITE_DESCRIPTION = (
     "flexlayout-dash — IDE-style dockable, resizable and floatable window "
     "panels for Plotly Dash. Wraps FlexLayout-React with portal-based "
@@ -125,6 +131,23 @@ OG_IMAGE_TYPE = "image/png"
 OG_IMAGE_ALT = SITE_BRAND
 
 # ---------------------------------------------------------------------------
+# Publisher identity for the CRAWLER document (dash-improve-my-llms 2.5+)
+# ---------------------------------------------------------------------------
+# `configure_seo(publisher=, same_as=)` in run.py writes these into the
+# crawler HTML's JSON-LD, where they are the machine-readable half of the same
+# claim templates/index.html makes for browsers. `same_as` is the identity
+# loop a docs satellite closes: this subdomain, the package's GitHub repo and
+# its PyPI project all pointing at each other is the strongest available
+# statement that flexlayout.2plot.dev is flexlayout-dash's canonical docs
+# home. The other two legs (PyPI `project_urls`, the README pointing back
+# here) are a per-package checklist item, not code.
+PUBLISHER = "Pip Install Python LLC"
+SAME_AS = [
+    "https://github.com/pip-install-python/dash-flex-layout",
+    "https://pypi.org/project/flexlayout-dash/",
+]
+
+# ---------------------------------------------------------------------------
 # The network's internal-traffic contract
 # ---------------------------------------------------------------------------
 # The analytics point of truth is https://2plot.ai/docs/satellite-analytics
@@ -167,6 +190,12 @@ def internal_ua(caller: str = "") -> str:
 GITHUB_URL = "https://github.com/pip-install-python/dash-flex-layout"
 DISCORD_URL = "https://discord.gg/WEnZR35mrK"
 YOUTUBE_URL = "https://www.youtube.com/channel/UC6Bmo0t0ZUpU_xKBYW0bJuQ"
+
+# Height of the fixed AppShell header, in px. Consumed by AppShell(header=...),
+# components/header.py's Group, and the mobile drawer, which docks itself
+# directly below the header. Change it here only — a drawer that disagrees
+# with the real header height either floats over it or leaves a dead band.
+HEADER_HEIGHT = 70
 
 # Populated by pages/markdown.py as documentation files load. Used by the
 # "Copy for LLM" button to surface each page's raw markdown.

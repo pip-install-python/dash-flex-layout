@@ -13,6 +13,8 @@ reported back as this app being slow.
 """
 from __future__ import annotations
 
+import os
+
 import dash
 
 
@@ -25,13 +27,26 @@ def health_payload(backend: str) -> dict:
     from lib.constants import APP_VERSION
     from lib.satellite_reporter import app_key
 
-    return {
+    payload = {
         "ok": True,
         "app": app_key(),
         "version": APP_VERSION,
         "backend": backend,
         "dash_version": dash.__version__,
     }
+    # Which commit the RUNNING instance was built from. This is what lets CD
+    # verify the artifact it just shipped rather than whichever build happens
+    # to be serving: a Render service with a disk restarts with a blip instead
+    # of overlapping instances, so a bare 200 proves nothing about WHICH build
+    # answered (the muicharts finding, 2026-08-21 — its battery had been
+    # verifying the PREVIOUS release on every run, invisibly, until a run added
+    # a new surface and the race finally lost). Optional on purpose: omitted
+    # where the platform variable does not exist, so the fleet's probe contract
+    # is unchanged and cd.yml falls back with a warning on older builds.
+    build = os.environ.get("RENDER_GIT_COMMIT")
+    if build:
+        payload["build"] = build
+    return payload
 
 
 def register_health_route(app, backend: str) -> None:
@@ -55,5 +70,5 @@ def register_health_route(app, backend: str) -> None:
         def _healthz():
             return jsonify(payload)
 
-    print(f"[boilerplate] /healthz registered ({backend}) — "
+    print(f"[flexlayout] /healthz registered ({backend}) — "
           "the 2plot.ai hourly health sweep probes this path.")

@@ -90,17 +90,31 @@ services:
       #
       # NOTE the variable name: SATELLITE_APP_KEY, not the SATELLITE_APP_ID the
       # pre-hub-client generation used. lib/satellite_reporter.py reads the new
-      # name; the old one is inert. The module's default is also "flexlayout"
-      # (the template ships "boilerplate", which would overwrite another app's
-      # rows at the hub), so this is belt-and-braces rather than load-bearing.
+      # name; the old one is inert.
+      #
+      # NO LONGER BELT-AND-BRACES. lib/satellite_reporter.py is now
+      # BYTE-IDENTICAL to the boilerplate's, which means its own fallback says
+      # "boilerplate" — it used to be edited to say "flexlayout", and that edit
+      # is what made the file a fork nobody could re-sync. The identity claim
+      # moved to run.py's marked FORK POINT
+      # (`os.environ.setdefault("SATELLITE_APP_KEY", "flexlayout")`, before any
+      # hub-facing import), and this row is the real env value that wins over
+      # it. Between the two there is no path on which this app's traffic files
+      # under the template's hub row.
       - key: SATELLITE_APP_KEY
         value: flexlayout
-      # Minimum seconds between rollup POSTs (the contract asks for hourly).
-      # 1800 predates the starter plan + disk (it halved what a free-tier
-      # eviction could swallow); harmless now — the hub takes the LAST
-      # report for a given (app, date).
+      # Minimum seconds between rollup POSTs. 900 is the network standard;
+      # this host carried 1800 from the free-tier era (it halved what an
+      # eviction could swallow) and no longer needs to — the disk below keeps
+      # the ledger, and the hub takes the LAST report for a given (app, date).
+      #
+      # This paces the DAILY ROLLUP only. Presence is a separate, lighter
+      # thread (SATELLITE_PRESENCE_INTERVAL_S, default 60s, floor 30, 0
+      # disables) that posts {app, active} to /api/satellite/active so the
+      # hub's board can show who is on this satellite right now. Left unset:
+      # the default is the contract.
       - key: SATELLITE_REPORT_INTERVAL_S
-        value: "1800"
+        value: "900"
 
       # The hub takes the LAST report for a given (app, date). On an
       # ephemeral filesystem a mid-day deploy wipes the ledger and the next
@@ -120,9 +134,110 @@ services:
       - key: LLMS_FULL_TIER
         value: public
 
-      # NOTE: there is deliberately no Clerk auth on this site. Every
-      # documentation page is public, so none of the CLERK_* satellite keys
-      # that leaflet.2plot.dev sets apply here.
+      # --- The interactive gate (lib/gate_layouts.py) ---------------------
+      # SHIPPED DARK. THE per-host gate switch: flip to `auth` and every docs
+      # page whose frontmatter doesn't pin a tier shows the sign-in card to
+      # anonymous browsers. Rollback is flipping it back — env only, no code
+      # revert anywhere.
+      #
+      # Declared EXPLICITLY at its default rather than left unset, for two
+      # reasons: the knob is visible here instead of being folklore, and
+      # run.py keys `access.configure(force=...)` off its presence — so the
+      # verdict plumbing (and the prerender's use of it) is live and
+      # verifiable during the dark launch instead of first switching on at
+      # the flip. Enforcement is proven BEFORE the flip, never after.
+      #
+      # Funnel pages never inherit it: `/` is pinned public in run.py, and so
+      # are the corpus pseudo-paths above.
+      - key: PAGE_DEFAULT_TIER
+        value: public
+      # The second axis, and the phase-4 agent flip: while "1", machine
+      # surfaces (the llms.txt family, crawler HTML, the prerender) stay open
+      # on auth pages so the crawl-demand window keeps measuring. "0" gates
+      # anonymous machine fetches too (keyed agents still pass). Do not flip
+      # before the window closes.
+      - key: LLMS_PUBLIC_DEFAULT
+        value: "1"
+
+      # Control-board overrides (/admin/control-board) persist here — on the
+      # same disk as the ledger, so toggles survive deploys. TWICE on the
+      # pilot host this row rode render.yaml without reaching the live
+      # service (Blueprint env applies only on a sync) and every toggle
+      # silently reset per deploy; the boot now prints a `[visibility]`
+      # WARNING when the variable is missing OR when /var/data is not
+      # actually a mounted disk. The ABSENCE of that warning in a deploy log
+      # is the acceptance check.
+      - key: PAGE_VISIBILITY_FILE
+        value: /var/data/page_visibility.json
+
+      # --- Clerk satellite auth (lib/auth.py) -----------------------------
+      # All OPTIONAL: absent, the site runs fully public and admin surfaces
+      # fail CLOSED (lib.auth.admin_access_open). The package itself is
+      # VENDORED (vendor/dash_clerk_auth-1.0.5.tar.gz) and installed in every
+      # image whether or not these keys are set — it registers a Dash
+      # entry-point hook, so it is imported at app construction regardless,
+      # which is why requirements.txt also floors clerk-backend-api and
+      # cryptography.
+      #
+      # Several of the values below are ALSO delivered by the shared env
+      # group `2plot-clerk-satellite`; a group and this file setting the same
+      # key is harmless (same value), and both are kept so the shape of a
+      # gating host is readable from the repo alone.
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      # The 2plot.ai PRIMARY on its production Clerk instance (Account Portal
+      # + Frontend API custom domains — not *.accounts.dev).
+      - key: CLERK_SIGN_IN_URL
+        value: https://accounts.2plot.ai/sign-in
+      - key: CLERK_SIGN_UP_URL
+        value: https://accounts.2plot.ai/sign-up
+      # THE RETURN TRIP — the stage-5 blocker the leaflet pilot surfaced.
+      # Unset, buildSatelliteRedirect() returns null, every sign-in path falls
+      # through to the Clerk Account Portal, the hub's return machinery never
+      # runs, and the user authenticates successfully and STAYS on the
+      # primary — no error anywhere. A DESTINATION, not a flag: the value is
+      # concatenated as `<value>?returnTo=<here>`, so `true` or a bare host
+      # resolves against THIS site and the button 404s — worse than unset.
+      # lib/auth.py warns at boot for both mistakes; the absence of those
+      # warnings is the deploy acceptance check.
+      - key: CLERK_SATELLITE_SIGN_IN_REDIRECT
+        value: https://2plot.ai/onboarding
+      # REQUIRED in satellite mode; a production custom-domain instance
+      # cannot derive it from CLERK_SIGN_IN_URL.
+      - key: CLERK_FRONTEND_API
+        value: https://clerk.2plot.ai
+      # The REGISTERED SATELLITE DOMAIN — deliberately NOT the host this app
+      # is served on. Every *.2plot.dev docs host is an ALLOWED SUBDOMAIN of
+      # the 2plot.dev satellite; clerk.flexlayout.2plot.dev is NXDOMAIN and
+      # setting it here hangs sign-in. Session cookies are scoped to
+      # .2plot.dev, which is exactly what the allowlist enables.
+      - key: CLERK_SATELLITE_DOMAIN
+        value: 2plot.dev
+      - key: CLERK_IS_SATELLITE
+        value: "true"
+      # Signs the session + __dca_identity cookies. MUST be unique per
+      # service — without it dash-clerk-auth falls back to a PUBLIC dev
+      # default string.
+      - key: SESSION_SECRET
+        generateValue: true
+      # Admin allowlist for admin-tier surfaces (lib.auth.is_admin_user),
+      # including /admin/control-board.
+      - key: ADMIN_EMAILS
+        sync: false
+
+      # --- Values delivered by shared env groups --------------------------
+      # Link these three in the Render dashboard; they carry the values that
+      # must not be typed twice across the fleet:
+      #
+      #   2plot-network-shared     the CROSS_APP_WEBHOOK_SECRET above
+      #   2plot-satellite-reporting  reporting cadence + BOTH /var/data paths
+      #   2plot-clerk-satellite    the full Clerk block above
+      #
+      # Group linkage cannot be verified from inside this repo. The boot
+      # guards are the check: no `[visibility]` warning and no `[auth]`
+      # warning in the deploy log means both landed.
 
     disk:
       name: analytics

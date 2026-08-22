@@ -25,6 +25,24 @@ WORKDIR /app
 # requirements.txt is the DOCUMENTATION SITE's dependency list (Dash 4.x, DMC,
 # the markdown engine, gunicorn) — the component's own are in pyproject.toml
 # and are not needed to serve the site.
+#
+# vendor/ holds dash_clerk_auth, which is not on PyPI: requirements.txt
+# installs it from `./vendor/dash_clerk_auth-1.0.5.tar.gz`, so vendor/ MUST be
+# copied BEFORE the requirements install. Get this order wrong and pip reports
+# the missing path as a SOFT WARNING, then dies seconds later on an OSError
+# that reads like a registry outage — a fork lost an afternoon to it. Auth
+# stays gated at runtime: no CLERK_* keys, no login wall.
+#
+# CACHE SEMANTICS (the round-2 fleet lesson, found by pannellum 2026-08-22):
+# this layer re-runs ONLY when vendor/ or requirements.txt bytes change. A
+# `>=` floor can NEVER pull a newer release through a cache hit — a code-only
+# commit rebuilds the app layers below while pip silently keeps whatever
+# version the image was first built with. Ship every dependency upgrade as a
+# floor bump in requirements.txt (grep the NUMBER — it also lives in run.py's
+# boot floor and in CI's two fingerprint asserts): the bump IS the cache bust,
+# and the boot floor turns a stale image from a silent downgrade into a loud
+# refusal to start.
+COPY vendor/ ./vendor/
 COPY requirements.txt ./requirements.txt
 # Two commands, deliberately (network standard, same as the boilerplate):
 # markdown2dash 0.1.2 declares `gunicorn<22` against the CVE-driven
