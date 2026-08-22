@@ -201,6 +201,24 @@ app = Dash(
     title=SITE_BRAND,
 )
 
+# dash-clerk-auth splits its setup either side of Dash(...): sessions, the
+# /api/auth/* routes and per-request identity are wired here. No-op when off.
+#
+# BOTH halves are required and the failure mode of shipping only one is
+# silent-and-plausible, which is why tests/test_auth_wiring.py pins the pair
+# structurally. This site shipped its gate-wave pass (2026-08-22) with
+# `register()` above and WITHOUT this line: every component rendered and
+# ClerkJS reported signed-in, while every SERVER render read signed-out — the
+# control board served the owner the sign-in card forever, POST
+# /api/auth/session answered 405 (the path fell through to Dash's GET-only
+# page catch-all), GET /api/auth/session served the app shell, and sign-out
+# never revoked. No test could see it: Clerk is off in test environments and
+# configure_app no-ops without keys, so the missing call was indistinguishable
+# from the deliberate no-op. The runtime half of the guard is the "Auth
+# wiring" block in scripts/smoke_live.py, which proves the routes answer on
+# the deployed host.
+_auth.configure_app(app)
+
 # ----------------------------------------------------------------------------
 # AI/LLM & SEO configuration
 # ----------------------------------------------------------------------------
