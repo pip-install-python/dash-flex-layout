@@ -49,15 +49,19 @@ branches, so the file stays a straight port and the probe contract
 does not fork — its module docstring says so. A sync that ports the
 ASGI modules here would add a backend this image cannot serve.
 
-### 3. `lib/health.py` — `app` is read from the environment, not from the reporter
+### 3. `lib/health.py` — `app` sourcing: CONVERGED, no longer a divergence
 
-`payload["app"] = os.environ.get("SATELLITE_APP_KEY") or "unknown"`,
-NOT `lib.satellite_reporter.app_key()`. `lib/satellite_reporter.py`
-is byte-identical to the template's, so its fallback is literally
-`"boilerplate"` — routing the probe through it would make a host
-that never claimed an identity report someone else's. The probe must
-be able to answer "nothing claimed an identity here". Identity is
-claimed once, at the marked FORK POINT near the top of `run.py`.
+*Retired 2026-08-24, and left here rather than deleted because two
+fleet records still describe it as live.* This fork reads
+`payload["app"] = os.environ.get("SATELLITE_APP_KEY") or "unknown"`
+rather than `lib.satellite_reporter.app_key()`, whose fallback is
+literally `"boilerplate"` — a host that never claimed an identity
+would otherwise report someone else's. The template has since done
+the same thing: `lib/health.py:77` in 1.6.15 (`1638528`) is that
+identical line. Verified by diff, not by memory. **Nothing to defend
+in a sync any more**; the reasoning is kept because it is why the
+line reads as it does, and identity is still claimed once, at the
+marked FORK POINT near the top of `run.py`.
 
 ### 4. `lib/health.py` — the payload carries `version`
 
