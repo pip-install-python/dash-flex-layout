@@ -296,8 +296,29 @@ Desktop.ini
 # IDE - full .idea directory
 .idea/
 
-# Claude Code
-.claude/
+# Session working documents are LOCAL BY CONVENTION, network-wide: sync
+# reports, handoffs, and kickoff briefs name hosts, topology, and process.
+# Two public fleet repos were caught tracking theirs and clerkhook's staged
+# handoff (naming the full satellite inventory) was one push from public
+# (2026-08-24). The ignore rule is the enforcement, here and in every fork.
+X402-SYNC-REPORT.md
+HANDOFF-*.md
+KICKOFF-*.md
+
+# The .claude/ development kit IS shipped — it is how every fork inherits
+# the network's behavioral contract, skills, and settings (the F1 fabric
+# build, 2026-08-24). Everything else in .claude/ stays local: session
+# scratch, screenshots, settings.local.json (per-seat model overrides),
+# vendored iteration copies. Allow-list, not blanket ignore — a dir-level
+# ignore cannot be re-included beneath, hence the /* form.
+#
+# Fork note: this repo's .claude/ also holds agents/, tasks/ and
+# support_files/ (component-build helpers predating the kit). They stay
+# LOCAL — the allow-list is the network's, ported verbatim.
+.claude/*
+!.claude/CLAUDE.md
+!.claude/settings.json
+!.claude/skills/
 
 # R package artifacts
 .Rhistory
