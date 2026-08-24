@@ -146,10 +146,116 @@ def test_prerender_rides_the_generic_lane_not_a_ua_gate(client):
         assert "hidden" not in div.group(0), (
             f"{path}: the prerender div carries `hidden` again — "
             "visibility-respecting consumers are back to reading "
-            "'Loading...'; the dimll floor is >=2.6.1 for exactly this"
+            "'Loading...'; the floor first moved (to 2.6.1) for exactly "
+            "this, and sits at >=2.7.1 now"
         )
         assert 'data-dimll-prerender="1">document.getElementById' in html, (
             f"{path}: the marked synchronous hide script is missing — "
             "JS browsers would flash the prose before React mounts"
         )
         assert "<main>" in html, f"{path}: prerender block carries no <main> prose"
+
+
+def test_prerender_single_h1_and_deduped_footer_llms_links(client, page_paths):
+    """What the >=2.7.1 floor buys, pinned from the app's side, EVERY page.
+
+    Below dimll 2.7.0 every page served TWO h1s to a generic client — the
+    injected prerender header plus the doc body's own markdown H1, a
+    duplicate-H1 page in every crawler's eyes (2026-08-22 SEO-audit
+    finding) — and the home footer printed its /llms.txt link twice (on
+    "/" the per-page link equals the root's; subpages legitimately carry
+    both, DISTINCT). The sweep also catches app-side H1 pollution: on the
+    boilerplate its first run found docs/example's machine lane serving
+    FIVE h1s because _expand_source_directives expanded a `.. source::`
+    example inside a ```markdown teaching fence (fixed fence-aware,
+    template 1.6.11 — ported here).
+
+    HTML comments are stripped before counting: templates/index.html
+    legitimately SAYS "h1" inside the comment explaining its noscript
+    block. The control board is skipped — it is hidden from every machine
+    surface and carries no prerender.
+    """
+    for path in docs_paths(page_paths):
+        html = client.get(path).text  # default UA — the universal lane
+        stripped = re.sub(r"<!--.*?-->", "", html, flags=re.S)
+
+        h1s = re.findall(r"<h1[\s>]", stripped)
+        assert len(h1s) == 1, (
+            f"{path}: {len(h1s)} h1 elements in the generic-lane document — "
+            "either the pre-2.7.0 prerender-header duplicate or app-side "
+            "markdown leaking headings (the fence-expansion class)"
+        )
+
+        footer = re.search(r"<footer.*?</footer>", stripped, re.S)
+        assert footer, f"{path}: no prerender footer in the generic-lane document"
+        llms_links = re.findall(r'href="([^"]*llms\.txt)"', footer.group(0))
+        assert len(llms_links) == len(set(llms_links)), (
+            f"{path}: duplicate llms.txt links in the prerender footer "
+            f"({llms_links}) — 2.7.0 dedups the per-page link when it "
+            "equals the root"
+        )
+        if path == "/":
+            assert llms_links == ["/llms.txt"], (
+                f"home footer llms links {llms_links} — expected exactly the "
+                "root link once"
+            )
+
+
+def test_source_expansion_is_fence_aware(app):
+    """A `.. source::` inside a fenced block is documentation, not a directive.
+
+    No page in docs/ teaches the directive inside a fence TODAY, which is
+    exactly why this is pinned: the boilerplate's docs/example and
+    docs/directives do, and the moment one of those pages is adopted here
+    the un-fenced expansion injects a ```python fence inside the already-open
+    one, closing it early — from there the inlined file renders as markdown
+    on the machine lane and every `# comment` line becomes an <h1> (the
+    five-h1 finding, 2026-08-23; the browser lane was never affected because
+    markdown2dash parses fences properly). The app fixture is requested only
+    so pages/markdown.py is already imported with the repo root as CWD.
+    """
+    import sys
+
+    expand = sys.modules["pages.markdown"]._expand_source_directives
+
+    expanded = expand(".. source::requirements.txt")
+    assert "# File: requirements.txt" in expanded, "real directive not expanded"
+    assert "```" in expanded, "expansion lost its fence"
+
+    taught = "```markdown\n.. source::requirements.txt\n```"
+    assert expand(taught) == taught, "a fenced example was expanded"
+
+    tilde = "~~~\n.. source::requirements.txt\n~~~"
+    assert expand(tilde) == tilde, "a tilde-fenced example was expanded"
+
+
+def test_llms_doc_preamble_does_not_double_a_body_h1(app):
+    """`# {name}` is skipped when the body already opens with its own H1.
+
+    docs/home/home.md opens with the site brand as an H1 — the identity
+    standard, pinned by tests/test_site_identity.py — so the preamble would
+    make the home page's machine lane a duplicate-H1 document: exactly the
+    defect dash-improve-my-llms 2.7.0 removed from the package's side,
+    reintroduced one layer up by this app. Measured on 2026-08-23: `/` served
+    3 h1s on 2.7.1 before this (noscript + preamble + brand), 4 on 2.6.1.
+
+    This is a deliberate divergence from the boilerplate, whose docs all
+    start at h2 and so never hit it.
+    """
+    import sys
+
+    md = sys.modules["pages.markdown"]
+    build = md._build_llms_doc
+
+    own_h1 = build("Home", "A description.", "# The Brand\n\nprose\n", "/")
+    assert own_h1.splitlines()[0] == "# The Brand", own_h1[:120]
+    assert "# Home" not in own_h1, "preamble title doubled the body's H1"
+
+    no_h1 = build("Theming", "A description.", "## Section\n\nprose\n", "/theming")
+    assert no_h1.splitlines()[0] == "# Theming", no_h1[:120]
+    assert "> A description." in no_h1, "preamble tagline lost"
+
+    # Fence-aware: a `# comment` inside a code block is not a heading, and
+    # this fork's docs are full of them.
+    fenced = build("Basic", "A description.", "```python\n# not a heading\n```\n", "/basic")
+    assert fenced.splitlines()[0] == "# Basic", fenced[:120]

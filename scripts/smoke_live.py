@@ -246,6 +246,33 @@ def main(base: str) -> int:
     if build:
         print(f"    build: {build}")
 
+    # WHICH satellite answered — a different question from which commit, on a
+    # fleet where every host shares one template and a hostname can be
+    # repointed between services (llms.2plot.dev was, 2026-08-23).
+    try:
+        payload = json.loads(health)
+    except Exception:
+        payload = {}
+    check("/healthz claims this app's identity",
+          payload.get("app") == "flexlayout",
+          f"app={payload.get('app')!r} — expected 'flexlayout'; 'unknown' means "
+          "SATELLITE_APP_KEY never reached the process (run.py's FORK POINT)",
+          fatal=False)
+
+    # THE CACHE-TRAP TELL. `geo` is emitted only on dash-improve-my-llms >=
+    # 2.7.0, and OMITTED (never error-flagged) below it. So its absence from a
+    # deploy that bumped the requirements floor to >=2.7.1 does not mean the
+    # geo guardrail is off — it means the Docker layer cache served a stale
+    # image and the floor never actually moved. That failure is otherwise
+    # completely silent from outside (the round-2 pannellum lesson).
+    check("/healthz carries the geo diagnostic (>=2.7.0 is really installed)",
+          isinstance(payload.get("geo"), dict),
+          "no `geo` block — either the image predates 2.7.0 or the "
+          "requirements-layer cache was never busted by the floor bump",
+          fatal=False)
+    if isinstance(payload.get("geo"), dict):
+        print(f"    geo: {payload['geo']}")
+
     # --- 1b. The prerender a BROWSER receives -----------------------------
     # THE CHECK A PLAIN CURL CANNOT MAKE. Fetching with a default or crawler
     # UA gets the separate crawler document; the universal prerender lives on
@@ -273,7 +300,7 @@ def main(base: str) -> int:
               "no #dimll-prerender for a browser — the universal lane is off or UA-gated")
         if div:
             check(f"prerender is VISIBLE on {path}", "hidden" not in div.group(0),
-                  f"{div.group(0)} — carries `hidden`; the dimll floor is >=2.6.1 for exactly this")
+                  f"{div.group(0)} — carries `hidden`; the floor first moved (to 2.6.1) for exactly this, and sits at >=2.7.1 now")
         check(f"prerender hide script marked on {path}",
               'data-dimll-prerender="1">document.getElementById' in html,
               "the marked synchronous hide script is missing — JS browsers "
@@ -281,6 +308,25 @@ def main(base: str) -> int:
         body = html.split("<main>", 1)[1].split("</main>", 1)[0] if "<main>" in html else ""
         check(f"prerender carries prose on {path}", len(body) > 500,
               f"only {len(body)} characters inside <main>")
+
+        # ONE h1 in the document a crawler parses. Below dimll 2.7.0 the
+        # injected prerender header and the doc body's own markdown H1 were
+        # both emitted; this app also used to prepend `# {name}` on top of a
+        # body that already had one (pages/markdown.py). Comments are
+        # stripped first — templates/index.html explains its noscript block
+        # in prose that names the tag.
+        stripped = re.sub(r"<!--.*?-->", "", html, flags=re.S)
+        h1s = re.findall(r"<h1[\s>]", stripped)
+        check(f"exactly one h1 on {path}", len(h1s) == 1,
+              f"{len(h1s)} h1 elements — duplicate-H1 page in a crawler's "
+              "parse (a pre-2.7.0 package, or app-side heading leakage)",
+              fatal=False)
+
+        footer = re.search(r"<footer.*?</footer>", stripped, re.S)
+        if footer:
+            links = re.findall(r'href="([^"]*llms\.txt)"', footer.group(0))
+            check(f"no duplicate llms.txt footer links on {path}",
+                  len(links) == len(set(links)), f"{links}", fatal=False)
 
     # --- 1c. The person->agent handoff ------------------------------------
     # /api/agent-key must be silent for anyone without a session. A 200

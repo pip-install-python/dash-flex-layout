@@ -186,6 +186,83 @@ def test_healthz(client):
     assert "ok" in response.text.lower()
 
 
+def test_healthz_is_live_not_a_snapshot(monkeypatch):
+    """The payload must be built per request, not closed over at registration.
+
+    A snapshot was harmless while every field was static and silently wrong
+    the moment one is not: on llms-2plot-dev the route is registered before
+    configure_geo runs, so a snapshot reported the geo guardrail unconfigured
+    on a host where it is configured — the diagnostic lying in exactly the
+    situation it exists for (found 2026-08-23, fixed fork-side first, ported
+    here from template 1.6.10). This fork registered its route the same way.
+    """
+    from types import SimpleNamespace
+
+    from flask import Flask
+
+    from lib.health import register_health_route
+
+    monkeypatch.setenv("SATELLITE_APP_KEY", "before")
+    stub = SimpleNamespace(server=Flask("healthz_snapshot_pin"))
+    register_health_route(stub, "flask")
+    probe = stub.server.test_client()
+    assert probe.get("/healthz").get_json()["app"] == "before"
+
+    monkeypatch.setenv("SATELLITE_APP_KEY", "after")
+    assert probe.get("/healthz").get_json()["app"] == "after"
+
+    # Flask lane: the route hands its own request headers to geo's
+    # `resolved`. The template pins the same contract on its Starlette lane,
+    # which this Flask-only fork has no equivalent of — the fallback that
+    # reads the Flask request context can never see a Starlette request,
+    # which is how pannellum's FastAPI healthz answered "no request context"
+    # forever (template 1.6.12).
+    body = probe.get("/healthz", headers={"CF-IPCountry": "FR"}).get_json()
+    if body.get("geo"):
+        assert "FR" in body["geo"]["resolved"], body["geo"]
+
+
+def test_healthz_identity_fields(monkeypatch):
+    """`build` says which commit answered, `app` says which satellite —
+    different questions on a fleet where every host shares one template and
+    a hostname can be repointed between services. `version` is this fork's
+    own addition, kept in step with pyproject.toml by check_release."""
+    from lib.constants import APP_VERSION
+    from lib.health import health_payload
+
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "cafebabe")
+    monkeypatch.setenv("SATELLITE_APP_KEY", "flexlayout")
+    payload = health_payload("flask")
+    assert payload["build"] == "cafebabe"
+    assert payload["app"] == "flexlayout"
+    assert payload["version"] == APP_VERSION
+
+    # `app` reads the environment DIRECTLY, not lib.satellite_reporter's
+    # app_key() — whose fallback is the template's "boilerplate". A health
+    # probe must be able to say "nothing claimed an identity here".
+    monkeypatch.delenv("SATELLITE_APP_KEY")
+    assert health_payload("flask")["app"] == "unknown"
+
+
+def test_healthz_geo_block_is_counts_not_codes():
+    """Present on dash-improve-my-llms >= 2.7.0 (counts and flags only — a
+    health endpoint is not where anyone learns policy), OMITTED on older
+    packages rather than error-flagged: a host on an older floor is not
+    broken, it predates the diagnostic. Its absence in PRODUCTION, on the
+    other hand, is the tell that the Docker cache trap ate the floor bump."""
+    from lib.health import health_payload
+
+    payload = health_payload("flask")
+    try:
+        from dash_improve_my_llms import geo  # noqa: F401
+    except ImportError:
+        assert "geo" not in payload
+    else:
+        block = payload["geo"]
+        assert isinstance(block["configured"], bool)
+        assert isinstance(block["denied"], int), "counts, never country codes"
+
+
 # ---------------------------------------------------------------------------
 # Content negotiation on /<page>/llms.txt (dash-improve-my-llms 2.2.0)
 #

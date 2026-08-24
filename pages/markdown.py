@@ -90,9 +90,21 @@ def _expand_source_directives(markdown_content: str) -> str:
     `/<page>/llms.txt`. Replacing the directive with the real file content
     is what makes the LLM output self-contained for the "paste into a chat
     window" audience.
+
+    FENCE-AWARE, and it has to be: a directive INSIDE a fenced code block
+    is documentation showing the syntax, not a directive. Expanding it
+    injects a ```python fence inside the already-open fence, which CLOSES
+    it early — from there the inlined file renders as markdown, every
+    `# comment` line becomes an <h1>, and the machine lane of the page
+    serves broken structure (found 2026-08-23 on the boilerplate by the
+    single-h1 pin now in tests/test_pages.py: docs/example and
+    docs/directives both teach `.. source::` inside ```markdown fences and
+    served FIVE h1s; the browser lane was never affected because
+    markdown2dash parses fences properly). No page in this fork's docs/
+    teaches the directive yet — which is exactly when to port the fix.
     """
-    def replace(match: re.Match) -> str:
-        file_path = match.group(1).strip()
+    def expansion(directive_line: str) -> str:
+        file_path = _SOURCE_DIRECTIVE.match(directive_line).group(1).strip()
         try:
             full = Path(file_path)
             content = full.read_text()
@@ -105,16 +117,63 @@ def _expand_source_directives(markdown_content: str) -> str:
         except Exception as exc:
             return f'\n<!-- Error reading {file_path}: {exc} -->\n'
 
-    return _SOURCE_DIRECTIVE.sub(replace, markdown_content)
+    out: List[str] = []
+    fence = None  # the marker that opened the block we are inside, if any
+    for line in markdown_content.split('\n'):
+        head = line.lstrip()[:3]
+        if fence is None and head in ('```', '~~~'):
+            fence = head
+        elif fence is not None and head == fence:
+            fence = None
+        elif fence is None and _SOURCE_DIRECTIVE.match(line):
+            out.append(expansion(line))
+            continue
+        out.append(line)
+    return '\n'.join(out)
+
+
+def _first_heading_level(markdown_content: str) -> int:
+    """The level of the document's first real heading, 0 if it has none.
+
+    Fence-aware for the same reason `_expand_source_directives` is: a
+    `# comment` line inside a ```python block is not a heading, and this
+    fork's docs are full of them.
+    """
+    fence = None
+    for line in markdown_content.split('\n'):
+        head = line.lstrip()[:3]
+        if fence is None and head in ('```', '~~~'):
+            fence = head
+            continue
+        if fence is not None:
+            if head == fence:
+                fence = None
+            continue
+        match = re.match(r'(#{1,6})\s', line)
+        if match:
+            return len(match.group(1))
+    return 0
 
 
 def _build_llms_doc(name: str, description: str, expanded_markdown: str, path: str) -> str:
     """Wrap the expanded markdown with the heading/description preamble that
-    /llms.txt readers expect."""
-    parts: List[str] = [f"# {name}\n"]
-    if description:
-        parts.append(f"> {description}\n")
-    parts.append("---\n")
+    /llms.txt readers expect.
+
+    A doc whose body opens with its OWN H1 supplies its own title, so the
+    preamble is skipped: prepending `# {name}` on top of it makes the machine
+    lane a duplicate-H1 document — precisely the defect dash-improve-my-llms
+    2.7.0 removed from the package's side (the injected prerender header vs
+    the body's markdown H1), reintroduced one layer up. docs/home/home.md is
+    the case that has it: its H1 is the site brand, pinned by
+    tests/test_site_identity.py, and its own blockquote is the tagline. Every
+    other page here starts at h2/h3 and gets the preamble as before.
+    """
+    parts: List[str] = []
+    if _first_heading_level(expanded_markdown) != 1:
+        parts.append(f"# {name}\n")
+        if description:
+            parts.append(f"> {description}\n")
+        parts.append("---\n")
     parts.append(expanded_markdown.rstrip() + "\n")
     parts.append("\n---\n")
     parts.append(f"*Source: {path}*\n")

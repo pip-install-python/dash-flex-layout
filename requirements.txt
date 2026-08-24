@@ -92,7 +92,23 @@ pydantic>=2.3.0
 #          the outside-audit finding of 2026-08-22, and what THIS HOST was
 #          serving that morning. run.py enforces this floor at boot and
 #          tests/test_pages.py pins the visible shape.
-dash-improve-my-llms[flask]>=2.6.1
+#   2.7.0  the prerender stops duplicating headings: the injected header H1
+#          and the doc body's own markdown H1 are deduped (below this every
+#          page was a duplicate-H1 page to crawlers), the home footer's
+#          doubled /llms.txt link is deduped, and the idempotency probe is
+#          hardened so a page that merely MENTIONS the prerender marker no
+#          longer loses its prerender. Also lands the geo guardrail seams
+#          that lib/health.py's /healthz block reports.
+#   2.7.1  THE CURRENT FLOOR — llms.txt v2: discovery relations
+#          (rel=alternate/describedby on both lanes) plus Link headers, the
+#          Accept: text/plain ramp, and the representation content digest.
+#          These are the surfaces the network's agent lane composes over.
+#          run.py's boot floor, .github/workflows/ci.yml's two fingerprint
+#          asserts and tests/test_pages.py all encode this number — grep it,
+#          never move one alone. AND REMEMBER THE CACHE TRAP: this line
+#          changing IS the Docker cache bust (see the Dockerfile). A `>=`
+#          floor can never pull a newer release through a cache hit.
+dash-improve-my-llms[flask]>=2.7.1
 
 # Default backend + production WSGI server. gunicorn 21.x carried two
 # request-smuggling CVEs (CVE-2024-6827, CVE-2024-1135); >=23 is the network

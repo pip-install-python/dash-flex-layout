@@ -2,7 +2,7 @@
 
 A lean, Flask-only Dash app that renders the markdown docs under ``docs/`` and
 serves AI/LLM + SEO surfaces (/llms.txt, /<page>/llms.txt, /robots.txt,
-/sitemap.xml) via dash-improve-my-llms >= 2.6.1.
+/sitemap.xml) via dash-improve-my-llms >= 2.7.1.
 
 Deployed at https://flexlayout.2plot.dev as a 2plot network satellite:
 
@@ -104,13 +104,22 @@ from dash_improve_my_llms import (
 # testing an older release.
 ALLOW_STALE_DEPS = os.environ.get("ALLOW_STALE_DEPS", "0") == "1"
 
-# 2.6.1 is the floor because 2.6.0's universal prerender ships the block with a
-# literal `hidden` attribute, so every visibility-respecting consumer (HTML-to-
-# text extractors, plausibly crawler content-weighting) reads "Loading..."
-# instead of the page's prose — the outside-audit finding of 2026-08-22. THIS
-# HOST served exactly that on 2026-08-22; tests/test_pages.py now pins the
-# visible shape so it cannot come back.
-LLMS_PKG_FLOOR = (2, 6, 1)
+# The floor first moved to 2.6.1 because 2.6.0's universal prerender ships the
+# block with a literal `hidden` attribute, so every visibility-respecting
+# consumer (HTML-to-text extractors, plausibly crawler content-weighting) reads
+# "Loading..." instead of the page's prose — the outside-audit finding of
+# 2026-08-22. THIS HOST served exactly that on 2026-08-22; tests/test_pages.py
+# pins the visible shape so it cannot come back.
+#
+# 2.7.1 is the round-3 network floor: 2.7.0 dedups the prerender H1 (below it
+# every page served TWO h1s to a generic client — the injected header plus the
+# doc body's own markdown H1) and the home footer's doubled /llms.txt link, and
+# hardens the idempotency probe so a page that merely MENTIONS the marker no
+# longer loses its prerender. 2.7.1 adds the llms.txt v2 discovery relations on
+# both lanes + Link headers, the Accept: text/plain ramp, and the
+# representation digest — the surfaces the network's agent lane composes over.
+# tests/test_pages.py pins the single-H1 shape on EVERY page.
+LLMS_PKG_FLOOR = (2, 7, 1)
 
 
 def _version(text: str) -> tuple:
@@ -140,6 +149,13 @@ if LLMS_PKG_FLOOR > _version(LLMS_PKG_VERSION):
     detail = (
         f"dash-improve-my-llms {LLMS_PKG_VERSION} is below the "
         f"{'.'.join(str(n) for n in LLMS_PKG_FLOOR)} floor in requirements.txt. "
+        "Below 2.7.1 the llms.txt v2 discovery relations (rel=alternate/"
+        "describedby + Link headers), the text/plain Accept ramp, and the "
+        "representation digest are missing. Below 2.7.0 every page serves a "
+        "DUPLICATE H1 to crawlers (the injected prerender header plus the doc "
+        "body's own), the home footer doubles its /llms.txt link, and a page "
+        "that merely MENTIONS the prerender marker loses its prerender "
+        "entirely (the marker-in-comment trap). "
         "Below 2.6.1 the universal prerender ships `hidden`, so every "
         "visibility-respecting consumer (text extractors, arguably crawler "
         "content-weighting) reads 'Loading...' instead of the page's prose. "

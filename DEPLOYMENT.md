@@ -194,7 +194,7 @@ Three boot lines are the acceptance check for a deploy, and two of them are
 [flexlayout] interactive gate: default tier 'public', 0 non-public page(s), ...
 ```
 
-...present, and naming `dash-improve-my-llms 2.6.1`; **no** `[visibility]`
+...present, and naming `dash-improve-my-llms 2.7.1`; **no** `[visibility]`
 warning (the `/var/data` disk is really mounted and `PAGE_VISIBILITY_FILE`
 really reached the service); **no** `[auth]` warning
 (`CLERK_SATELLITE_SIGN_IN_REDIRECT` is set and is an absolute URL — it is a

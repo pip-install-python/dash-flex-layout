@@ -256,19 +256,29 @@
     <!-- =====================================================================
          NO-JAVASCRIPT FALLBACK
 
-         What a JS-less consumer gets. dash-improve-my-llms 2.6.1's prerender
-         already puts each page's real prose in the body VISIBLY (2.6.0 shipped
-         it `hidden`, which is the floor run.py enforces) — this block is the
-         belt to that braces, and the place the machine surfaces are named for
-         anyone reading the raw document.
+         What a JS-less consumer gets. dash-improve-my-llms >= 2.6.1's
+         prerender already puts each page's real prose in the body VISIBLY
+         (2.6.0 shipped it `hidden`) and, since 2.7.0, without duplicating the
+         page's own heading — both are floors run.py enforces at boot. This
+         block is the belt to that braces, and the place the machine surfaces
+         are named for anyone reading the raw document.
          ================================================================== -->
     <noscript>
+        <!-- No h1 element in here, deliberately: crawlers run no JavaScript
+             and PARSE noscript content, so a top-level heading in this block
+             becomes a second site-wide one on every page, competing with each
+             page's own. Found on the llms-2plot-dev fork and fixed at the
+             source (boilerplate 3d0645b, 2026-08-23); measured HERE on
+             2026-08-23 as the last duplicate standing after the dimll 2.7.1
+             floor deduped the prerender's. The hierarchy below starts one
+             level down for exactly that reason, and both
+             tests/test_config.py and tests/test_pages.py pin it. -->
         <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto; line-height: 1.6;">
-            <h1>flexlayout-dash — resizable panel layouts for Dash</h1>
+            <h2>flexlayout-dash — resizable panel layouts for Dash</h2>
             <p><strong>The interactive dock demos on this site need JavaScript.</strong>
                The documentation itself does not — every page is available as plain text below.</p>
 
-            <h2>For AI assistants and plain-text readers</h2>
+            <h3>For AI assistants and plain-text readers</h3>
             <ul style="margin: 20px 0;">
                 <li><a href="https://flexlayout.2plot.dev/llms.txt"><strong>llms.txt</strong></a> — every page's prose, plus the cross-host network directory</li>
                 <li><a href="https://flexlayout.2plot.dev/llms-small.txt"><strong>llms-small.txt</strong></a> — a compact briefing</li>
@@ -278,7 +288,7 @@
                 <li><a href="https://flexlayout.2plot.dev/robots.txt"><strong>robots.txt</strong></a> — crawler instructions</li>
             </ul>
 
-            <h2>What the package does</h2>
+            <h3>What the package does</h3>
             <ul>
                 <li>Dockable, resizable, floatable window panels for Plotly Dash</li>
                 <li>Drag tabs between tabsets; split, nest and maximize panes</li>

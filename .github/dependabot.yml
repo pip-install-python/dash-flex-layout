@@ -1,0 +1,61 @@
+# Version drift is the network's chronic disease — satellites were still
+# running a 2.0-era artifact the day 2.3.4 shipped, and nothing about a stale
+# host looks broken from the outside. This is the standing fix.
+#
+# TEMPLATE FILE: satellites copy this from dash-documentation-boilerplate
+# (ab22fd7). The `dash-network` group is the point — a package release lands as
+# ONE reviewable pull request per repo instead of five, which is the difference
+# between a rollout and a chore.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Version-update PRs are restricted to the network packages — the drift
+    # alarm this file exists for. Without this allow-list, dependabot also
+    # proposes FLOOR-RAISES for every other requirement (gunicorn >=23 →
+    # >=26, cryptography >=50 → >=52, ...). Those floors encode
+    # minimum-compatibility knowledge (the gunicorn floor IS the CVE fact,
+    # and it is also why markdown2dash installs --no-deps here), the
+    # resolver already installs latest under them, and a raise erases the
+    # floor's meaning while adding none — llms-2plot-dev's fork opened five
+    # such PRs on its first push, all closed with reasons (2026-08-23).
+    # SECURITY updates are unaffected: they arrive through GitHub's separate
+    # security-update channel regardless of this list.
+    allow:
+      - dependency-name: "dash*"
+      - dependency-name: "plotly*"
+      - dependency-name: "markdown2dash"
+    groups:
+      dash-network:
+        patterns:
+          - "dash*"
+          - "plotly*"
+          - "markdown2dash"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+
+# NO npm ecosystem, deliberately — and this repo is the one place in the fleet
+# where that needs saying, because its package.json is REAL (React 18 +
+# FlexLayout-React + webpack, the component's own build toolchain; the
+# boilerplate deleted its vestigial copy in 1.6.9). A React or webpack bump
+# here is not a config change: it requires `npm run build`, which rewrites
+# flexlayout_dash/flexlayout_dash.min.js — the COMMITTED artifact this site and
+# every `pip install flexlayout-dash` serve. Dependabot cannot rebuild that, so
+# an automated npm PR would ship a lockfile whose bundle nobody regenerated.
+# Component dependency moves go through a human `npm run build` + release.
