@@ -175,3 +175,18 @@ build commands, the R-generator crash note) and appends the network
 role & behavioral contract section verbatim — the template's copy of
 that file documents the TEMPLATE's directives and customization
 points, and porting it byte-for-byte would delete this repo's guide.
+
+### 14. `scripts/smoke_live.py` — `post()` verifies certificates
+
+Ahead of the template rather than beside it, and recorded here because a
+byte-copy would REINTRODUCE the defect. The template's `post()` calls
+`urlopen` without `context=SSL_CONTEXT` while its `fetch()` passes it,
+so on any Python without OS trust-store integration (macOS) every auth
+POST dies with CERTIFICATE_VERIFY_FAILED, returns 0, and the check
+reports "the configure_app(app) half of the auth wiring is missing" —
+a live-outage accusation produced by a CA bundle. Measured against
+production 2026-08-24: the script said 0/0 while `curl -X POST` on the
+same machine got 401 and 200. Fixed here in `154688e` with a source pin
+(`tests/test_smoke_live.py::test_post_verifies_certificates_the_same_way_fetch_does`),
+because `wired` monkeypatches fetch/post and no behavioural test can
+reach the line. Retire this entry once the template carries the fix.
