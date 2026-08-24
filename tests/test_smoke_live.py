@@ -333,3 +333,38 @@ def test_a_wired_bulletin_raises_no_warning(wired, smoke, monkeypatch, capsys):
     assert wired.main(BASE) == 0
     output = capsys.readouterr().out
     assert "ok    the network bulletin is wired" in output
+
+
+def test_post_verifies_certificates_the_same_way_fetch_does():
+    """A source pin, because no behavioural test can reach this line.
+
+    `wired` monkeypatches `fetch`, and the auth probe's `post` is stubbed the
+    same way wherever it is exercised, so the real urlopen call in `post`
+    never runs under pytest — which is exactly how it shipped without
+    `context=SSL_CONTEXT` while `fetch` had it.
+
+    The consequence was not cosmetic. On any Python without OS trust-store
+    integration (macOS — the fleet's whole local-development half) every POST
+    raised CERTIFICATE_VERIFY_FAILED, `post` returned 0, and the check
+    reported "the configure_app(app) half of the auth wiring is missing":
+    a live-outage accusation, produced by a certificate bundle. Measured
+    against production 2026-08-24 — this script reported 0/0 for both auth
+    routes while `curl -X POST` on the same machine got 401 and 200.
+
+    Linux's default context verifies fine, so CD stayed green throughout.
+    A check that can only fail where nobody is watching is worse than no
+    check at all.
+    """
+    import re
+
+    source = (REPO_ROOT / "scripts" / "smoke_live.py").read_text()
+    body = source[source.index("def post("):]
+    body = body[: body.index("\ndef ")]
+
+    call = re.search(r"urllib\.request\.urlopen\((.*?)\)\s*as", body, re.S)
+    assert call, "post() no longer calls urlopen — re-point this pin"
+    assert "context=SSL_CONTEXT" in call.group(1), (
+        "post() must pass the certifi-backed SSL context that fetch() uses; "
+        "without it every POST 0s on macOS and the auth-wiring check accuses "
+        "the app of a regression it does not have"
+    )

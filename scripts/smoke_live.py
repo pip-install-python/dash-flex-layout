@@ -137,7 +137,19 @@ def post(url: str, payload: str = "{}") -> int:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as resp:
+        # `context=SSL_CONTEXT` for the same reason `fetch` uses it, and the
+        # omission here was a real one-way defect: on any Python without OS
+        # trust-store integration (macOS, the fleet's whole local-dev half)
+        # every POST died with CERTIFICATE_VERIFY_FAILED, returned 0, and the
+        # check announced "the configure_app(app) half of the auth wiring is
+        # missing" — accusing the app of the exact regression dc8c1d6 fixed.
+        # Measured against production 2026-08-24: this script said 0/0 while
+        # `curl -X POST` on the same machine, same minute, got 401 and 200.
+        # CD never saw it (Linux's default context verifies fine), so the
+        # failure mode was local-only and read as a live outage.
+        with urllib.request.urlopen(
+            request, timeout=TIMEOUT, context=SSL_CONTEXT
+        ) as resp:
             return resp.status
     except urllib.error.HTTPError as exc:
         return exc.code
