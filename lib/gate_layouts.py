@@ -70,9 +70,13 @@ def sign_in_layout(page_name: str, path: str | None = None):
 
     if demo is not None:
         intro = (
+            # 1.6.16 (SYNC-1.6.10-1.6.16 item 9): this line used to end "and
+            # the AI assistant" — no fork wires one, and a gate card selling
+            # a feature that does not exist is the network's own credibility
+            # spent at its highest-intent moment (leaflet's F1 finding).
             f"You're looking at a live preview of {page_name}. Create a free "
             "account to unlock the full documentation — every interactive "
-            "example, the complete API reference, and the AI assistant."
+            "example and the complete API reference."
         )
     else:
         intro = (

@@ -62,4 +62,10 @@ EXPOSE 8055
 
 # run:server is the Flask WSGI callable (run.py: `server = app.server`).
 # Shell form so ${PORT} / ${WEB_CONCURRENCY} expand when the container starts.
-CMD gunicorn run:server --bind "0.0.0.0:${PORT}" --workers "${WEB_CONCURRENCY:-2}" --threads 4 --timeout 120 --access-logfile - --error-logfile -
+#
+# The port is defaulted AT THE POINT OF USE (${PORT:-8055}), not only by the
+# ENV above (template 1.6.14, SYNC-1.6.10-1.6.16 item 5). ENV covers PORT
+# being UNSET; it does not cover PORT being set EMPTY, which a platform can
+# do — and a bare ${PORT} then collapses the bind to "0.0.0.0:" and the
+# container never listens. 8055 is this host's number, not the template's.
+CMD gunicorn run:server --bind "0.0.0.0:${PORT:-8055}" --workers "${WEB_CONCURRENCY:-2}" --threads 4 --timeout 120 --access-logfile - --error-logfile -

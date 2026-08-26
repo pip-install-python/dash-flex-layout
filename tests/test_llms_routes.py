@@ -222,6 +222,28 @@ def test_healthz_is_live_not_a_snapshot(monkeypatch):
         assert "FR" in body["geo"]["resolved"], body["geo"]
 
 
+def test_resolved_country_reads_explicit_headers_without_a_request():
+    """The context-free pin — the only one that can actually fail here.
+
+    SYNC-1.6.10-1.6.16 item 1 (template 1.6.13). The in-request pin above
+    passes even if the Flask route drops its `headers=`: inside a request
+    the context fallback reads the same headers anyway, and the lanes that
+    genuinely break (Starlette/Quart) are unreachable from this Flask-only
+    fork's suite (DIVERGENCES §2) — so the template's FastAPI half of this
+    item has no counterpart here and this pin carries the whole contract.
+    Calling _resolved_country with a plain dict OUTSIDE any request context
+    has no fallback to hide behind (dash-flows' finding, 2026-08-23).
+    """
+    import pytest
+
+    from lib.health import _resolved_country
+
+    result = _resolved_country({"CF-IPCountry": "DE"})
+    if result.startswith("unavailable (pre-2.7.0"):
+        pytest.skip("geo shipped in dash-improve-my-llms 2.7.0")
+    assert "DE" in result, result
+
+
 def test_healthz_identity_fields(monkeypatch):
     """`build` says which commit answered, `app` says which satellite —
     different questions on a fleet where every host shares one template and

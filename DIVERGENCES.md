@@ -142,18 +142,36 @@ declaration is set-equal to what autodiscovery finds;
 `tests/test_seo_icons.py` pins both, and pins that these are the same
 paths `templates/index.html` links.
 
-### 11. `.github/dependabot.yml` has no npm ecosystem
+### 11. `.github/dependabot.yml` — never an npm ecosystem here
 
-This repo's `package.json` is REAL (React 18 + FlexLayout-React +
-webpack — the component's own build toolchain; the boilerplate
-deleted its vestigial copy in 1.6.9). A React or webpack bump here is
-not a config change: it requires `npm run build`, which rewrites the
-COMMITTED `flexlayout_dash/flexlayout_dash.min.js` that this site and
-every `pip install flexlayout-dash` serve. Dependabot cannot rebuild
-that, so an automated npm PR would ship a lockfile whose bundle
-nobody regenerated. Component dependency moves go through a human
-`npm run build` + release. The pip allow-list and the docker/actions
-ecosystems match the template.
+**An explanatory mention, NOT a byte claim** — recorded because the
+hazard is this fork's alone, not because the file diverges. The
+template has no npm entry either, so nothing here is a difference
+from it; `.github/dependabot.yml` is deliberately absent from the
+byte-owned fence below and the F3b fan-out owns its bytes.
+
+Why it still needs saying: this repo's `package.json` is REAL (React
+18 + FlexLayout-React + webpack — the component's own build
+toolchain; the boilerplate deleted its vestigial copy in 1.6.9). A
+React or webpack bump here is not a config change: it requires `npm
+run build`, which rewrites the COMMITTED
+`flexlayout_dash/flexlayout_dash.min.js` that this site and every
+`pip install flexlayout-dash` serve. Dependabot cannot rebuild that,
+so an automated npm PR would ship a lockfile whose bundle nobody
+regenerated. Component dependency moves go through a human `npm run
+build` + release. **This paragraph is the durable home for that
+reasoning** — the in-file comment saying the same thing is a
+convenience copy, and template 1.6.24's rewrite of that file will
+remove it. That is fine; do not read its removal as permission to
+add an npm entry.
+
+Correction, 2026-08-26: this entry previously ended "The pip
+allow-list and the docker/actions ecosystems match the template."
+That is no longer true — template 1.6.24 removed the pip ecosystem
+outright (floors move through sync specs, not floor-raise PRs) and
+this fork has not yet consumed that file. The gap is UNSYNCED DRIFT,
+not divergence, and it is the 1.6.22-1.6.27 `sync-verbatim` block's
+to close.
 
 ### 12. The image has no apt layer, and therefore no HEALTHCHECK
 
@@ -168,6 +186,18 @@ HEALTHCHECK means adding an apt layer for one binary; if the fleet
 ever standardizes on the in-image check, that is the trade to make
 knowingly.
 
+Amended 2026-08-26: the "apt layer for one binary" premise is
+weaker than it was. `SYNC-1.6.10-1.6.16` item 5 records clerkhook's
+python-urllib probe as an accepted alternative — no apt, no curl —
+and `SYNC-1.6.17-1.6.21` item 2 (CI asserts `docker inspect`'s
+`State.Health.Status`, failing on `none`) is BLOCKED here for as
+long as this image declares no HEALTHCHECK: with none declared the
+verdict is `none` by construction, so that item would fail
+vacuously rather than measure anything. Recorded as an open
+decision, not defended: this entry's second half (liveness is
+covered from outside the container) still holds, but "it would cost
+an apt layer" no longer does.
+
 ### 13. `.claude/` ships the kit only; this fork's older workspace stays local
 
 The `.gitignore` allow-list is the template's, ported verbatim
@@ -180,17 +210,66 @@ role & behavioral contract section verbatim — the template's copy of
 that file documents the TEMPLATE's directives and customization
 points, and porting it byte-for-byte would delete this repo's guide.
 
-### 14. `scripts/smoke_live.py` — `post()` verifies certificates
+### 14. `scripts/smoke_live.py` — `post()` verifies certificates: RETIRED
 
-Ahead of the template rather than beside it, and recorded here because a
-byte-copy would REINTRODUCE the defect. The template's `post()` calls
-`urlopen` without `context=SSL_CONTEXT` while its `fetch()` passes it,
-so on any Python without OS trust-store integration (macOS) every auth
-POST dies with CERTIFICATE_VERIFY_FAILED, returns 0, and the check
-reports "the configure_app(app) half of the auth wiring is missing" —
-a live-outage accusation produced by a CA bundle. Measured against
-production 2026-08-24: the script said 0/0 while `curl -X POST` on the
-same machine got 401 and 200. Fixed here in `154688e` with a source pin
-(`tests/test_smoke_live.py::test_post_verifies_certificates_the_same_way_fetch_does`),
-because `wired` monkeypatches fetch/post and no behavioural test can
-reach the line. Retire this entry once the template carries the fix.
+*Retired 2026-08-26 — the template carries the fix. Left here rather
+than deleted because the fleet records that credit this fork still
+describe the divergence as live.*
+
+This fork fixed `post()` to pass `context=SSL_CONTEXT` in `154688e`
+after measuring the template-class defect against production
+2026-08-24: the script reported 0/0 for both auth POSTs while `curl
+-X POST` on the same machine, the same minute, got 401 and 200. On
+any Python without OS trust-store integration (macOS — the fleet's
+whole local-dev half) every auth POST died in the TLS handshake,
+returned 0, and the check accused the app of the very
+`configure_app(app)` regression it exists to detect.
+
+The template absorbed it in 1.6.16 (`ceb0d50`, shipped as
+`SYNC-1.6.10-1.6.16` item 7). Verified at template 1.6.27
+(`055363e`): its `post()` now calls `urlopen(request,
+timeout=TIMEOUT, context=SSL_CONTEXT)` under a comment naming this
+fork's commit. **Nothing to defend in a sync any more.** One shape
+difference remains and is sanctioned by the item itself: the
+template's source pin lives in `tests/test_auth_wiring.py`, this
+fork's in
+`tests/test_smoke_live.py::test_post_verifies_certificates_the_same_way_fetch_does`
+— the item's batch-1 correction (2026-08-25) records that home as
+satisfying it, because the pin is not auth-specific.
+
+## Byte-owned paths
+
+Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
+a path listed here; everything else in the spec's `sync-verbatim`
+block is the template's to update mechanically. Prose above explains
+divergences; this block is the machine answer.
+
+Repo-relative paths, one per line, `#` comments, no `..`; exactly one
+block. An EMPTY block means "the template owns every sync-verbatim
+path here" — present so the absence is a statement. When the block
+exists it is authoritative; a fork without it gets the conservative
+mention heuristic (over-flags, never restores).
+
+Audited 2026-08-26 against every `sync-verbatim` path in the three
+specs at template 1.6.27 (`055363e`) — the four kit files, plus
+`.github/dependabot.yml` and `tests/test_auth_demos.py` from
+1.6.22-1.6.27. The block is EMPTY, and that is a measurement:
+
+- The four kit files are byte-identical to the template here (md5,
+  2026-08-26) — the F3b fan-out already delivered them in PRs #4/#5.
+  §13 names `skills/` only as the `.gitignore` allow-list's contents,
+  which is the mention heuristic's false positive, not a byte claim.
+- `.github/dependabot.yml` differs, and the difference is unsynced
+  drift (1.6.24's pip removal), not divergence — see §11. Fencing it
+  would freeze that drift in and route a mechanical item to a session
+  forever.
+- `tests/test_auth_demos.py` is the template's bytes, ported here
+  2026-08-26; this fork's judgment lives in `lib/auth_demos.py`'s
+  DEMOS table, which is not a `sync-verbatim` path.
+- §13's byte claim on `.claude/CLAUDE.md`, and the host swap in
+  `.claude/settings.json`, are real — but neither file is a
+  `sync-verbatim` path (both are `# requires:` gates and explicitly
+  session-class adapted halves), so neither belongs in this block.
+
+```yaml byte-owned
+```
