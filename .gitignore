@@ -296,6 +296,14 @@ Desktop.ini
 # IDE - full .idea directory
 .idea/
 
+# Handoff notes for work that belongs in ANOTHER repo — the kickoff docs that
+# start a session elsewhere. Local scratch by design: a task list for
+# 2plot.dev has no business in this checkout, and it was omitted from the
+# block below once and read as complete (batch-1 correction, template 1.6.15
+# item 6 — the template's block is the source of truth, not a prompt's
+# summary of it).
+kickoff/
+
 # Session working documents are LOCAL BY CONVENTION, network-wide: sync
 # reports, handoffs, and kickoff briefs name hosts, topology, and process.
 # Two public fleet repos were caught tracking theirs and clerkhook's staged
