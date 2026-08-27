@@ -17,6 +17,7 @@ reported back as this app being slow.
 from __future__ import annotations
 
 import os
+import platform
 
 import dash
 
@@ -55,7 +56,23 @@ def _resolved_country(headers=None) -> str:
 
 
 def health_payload(backend: str, headers=None) -> dict:
-    payload = {"ok": True, "backend": backend, "dash_version": dash.__version__}
+    payload = {
+        "ok": True,
+        "backend": backend,
+        "dash_version": dash.__version__,
+        # WHICH interpreter is serving (SYNC-1.6.22-1.6.29 item 5). The
+        # image, the CI matrix and render.yaml can each declare a Python and
+        # nothing on the wire could contradict any of them — the template
+        # carried a patch-pinned 3.11.8 image, a 3.12 matrix and a 3.12.0
+        # render.yaml at the same time, invisibly, for months (ops-seat
+        # finding, 2026-08-25). This field is the observability;
+        # scripts/network_smoke.py's python_matches_declared asserts it
+        # against the Dockerfile's FROM minor, which is the teeth. Absence
+        # is NOT-ADOPTED, never not-applicable: emojimart's image reached
+        # 3.14 through dependabot alone, so the cheap half of the detect
+        # passed while the expensive half failed silently.
+        "python": platform.python_version(),
+    }
 
     # Which commit the RUNNING instance was built from. This is what lets CD
     # verify the artifact it shipped rather than whichever build happens to

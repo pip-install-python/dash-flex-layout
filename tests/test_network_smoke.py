@@ -20,6 +20,7 @@ container run and the post-deploy run exist as well.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 
 import pytest
@@ -63,6 +64,13 @@ def wired(battery, client, monkeypatch):
 
     monkeypatch.setattr(battery, "fetch", fetch)
     monkeypatch.setattr(battery, "_RESULTS", [])
+    # No declaration in the in-process seat: here the "host" serves from the
+    # suite's own interpreter, which on the docs matrix's window legs
+    # (3.13/3.12) — and in any local venv — is deliberately not the fleet
+    # Python. `python_matches_declared` still proves the FIELD exists, which
+    # is the half that can rot silently; holding the artifact to the
+    # Dockerfile's minor is the container and production seats' job.
+    monkeypatch.setattr(battery, "declared_python_minor", lambda: None)
     battery.seen_agents = seen_agents
     return battery
 
@@ -119,3 +127,30 @@ def test_the_default_base_url_matches_the_container_port(battery):
         f"the battery defaults to port {port}; the image exposes something else"
     )
     assert f"PORT={port}" in dockerfile, "the image's default PORT differs"
+
+
+def test_a_host_with_no_python_field_fails_the_battery(wired, monkeypatch):
+    """Absence is NOT-ADOPTED, never not-applicable (SYNC-1.6.22-1.6.29 item
+    5, as amended 1.6.28).
+
+    emojimart's image reached the fleet Python through a dependabot bump
+    alone, so `grep ^FROM Dockerfile` — the cheap half of the detect — passed
+    while the expensive half, the wire, had nothing to report. A check that
+    skipped on a missing field would have called that host adopted.
+    """
+    real_fetch = wired.fetch
+
+    def fieldless(url, *args, **kwargs):
+        status, headers, text = real_fetch(url, *args, **kwargs)
+        if url.endswith("/healthz"):
+            payload = json.loads(text)
+            payload.pop("python", None)
+            return status, headers, json.dumps(payload)
+        return status, headers, text
+
+    monkeypatch.setattr(wired, "fetch", fieldless)
+    wired.satellite_checks(BASE)
+    failed = {name: detail for name, verdict, detail in wired._RESULTS
+              if verdict == wired.FAIL}
+    assert "python_matches_declared" in failed, wired._RESULTS
+    assert "no `python` field" in failed["python_matches_declared"]

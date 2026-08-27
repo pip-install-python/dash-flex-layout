@@ -39,6 +39,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import ssl
 import sys
 import time
 import urllib.error
@@ -99,6 +101,35 @@ class SmokeFailure(Exception):
     pass
 
 
+def _ssl_context() -> ssl.SSLContext:
+    """Verify certificates via certifi when it is importable.
+
+    The same fix scripts/smoke_live.py carries, arriving here for the same
+    reason and one round later (SYNC-1.6.22-1.6.29 §B addendum): macOS
+    Python ships without OS trust-store integration, so a bare urllib https
+    fetch dies with CERTIFICATE_VERIFY_FAILED — and `fetch` below RAISES
+    after its retries, so the battery reports a perfectly healthy host as
+    down, from a Mac only. CI and CD never see it (Linux verifies fine),
+    which is exactly what let the smoke_live half of this defect survive as
+    long as it did.
+
+    `try`/`except ImportError`, not a hard import: this script's contract is
+    stdlib-only — "runs anywhere without an install step", and ci.yml calls
+    it with a bare `python3` against the container before anything is
+    pip-installed. Verification stays ON either way; certifi only supplies
+    the CA bundle.
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+SSL_CONTEXT = _ssl_context()
+
+
 def fetch(url: str, ua: str = UA, method: str = "GET",
           body: bytes | None = None, headers: dict | None = None,
           timeout: int = TIMEOUT, retries: int = 3):
@@ -118,7 +149,8 @@ def fetch(url: str, ua: str = UA, method: str = "GET",
         for k, v in (headers or {}).items():
             req.add_header(k, v)
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with urllib.request.urlopen(
+                    req, timeout=timeout, context=SSL_CONTEXT) as r:
                 return (r.status, {k.lower(): v for k, v in r.headers.items()},
                         r.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as e:
@@ -151,6 +183,39 @@ def expect(cond: bool, msg: str) -> None:
         raise SmokeFailure(msg)
 
 
+def declared_python_minor():
+    """The fleet Python this checkout declares: the Dockerfile's FROM minor.
+
+    None when there is nothing to hold the host against — no Dockerfile
+    beside this script (the script run outside a checkout) — or when the
+    SEAT itself is off-contract: `SMOKE_PYTHON_DECLARED=ignore` is for a
+    seat whose interpreter is deliberately not the fleet Python, and
+    tests/test_network_smoke.py's in-process seat patches this to None for
+    the same reason. The seats that leave it armed are exactly the ones
+    whose interpreter is a deploy artifact: ci.yml's docker job against the
+    container it just built, and cd.yml's verify job against production.
+
+    On THIS fork ci.yml's site-tests job also runs the battery, against an
+    app it booted on the runner's own interpreter — armed on purpose, since
+    tests/test_python_version.py holds that job's setup-python to this same
+    minor. If those two ever part, this check is where it surfaces.
+    """
+    if os.environ.get("SMOKE_PYTHON_DECLARED") == "ignore":
+        return None
+    dockerfile = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "Dockerfile")
+    try:
+        with open(dockerfile, encoding="utf-8") as fh:
+            for line in fh:
+                m = re.match(r"FROM\s+python:(\d+\.\d+)", line)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return None
+
+
 # ------------------------------------------------------------- the battery --
 
 def satellite_checks(base: str) -> None:
@@ -160,6 +225,29 @@ def satellite_checks(base: str) -> None:
         status, _, text = get("/healthz")
         expect(status == 200, f"/healthz {status}")
         expect(json.loads(text).get("ok") is True, f"unexpected body {text[:120]!r}")
+
+    def python_matches_declared():
+        # WHICH interpreter serves, versus the one this repo declares. Three
+        # Pythons coexisted for months on the template (image 3.11.8, matrix
+        # 3.12, render.yaml 3.12.0) because nothing on the wire could
+        # contradict any of them — /healthz's `python` field is the
+        # observability, and this check is the teeth: the served minor must
+        # equal the Dockerfile's FROM minor. Field ABSENCE is a failure in
+        # its own right, never a skip: an image that reached the fleet
+        # Python through dependabot alone passes a `grep ^FROM` and fails
+        # here (emojimart, 2026-08-26).
+        status, _, text = get("/healthz")
+        expect(status == 200, f"/healthz {status}")
+        served = json.loads(text).get("python") or ""
+        expect(bool(served), "/healthz carries no `python` field — the "
+               "serving interpreter is invisible (a pre-item-5 build?)")
+        declared = declared_python_minor()
+        if declared is None:
+            return
+        served_minor = ".".join(served.split(".")[:2])
+        expect(served_minor == declared,
+               f"host serves Python {served}, repo declares {declared} — "
+               "a stale image, or a platform runtime nobody aligned")
 
     def llms_txt_identity():
         # The check this whole standard exists for. The H1 is what an agent
@@ -270,6 +358,7 @@ def satellite_checks(base: str) -> None:
 
     for name, fn in (
         ("healthz_ok", healthz_ok),
+        ("python_matches_declared", python_matches_declared),
         ("llms_txt_identity", llms_txt_identity),
         ("llms_txt_names_the_hub", llms_txt_names_the_hub),
         ("page_llms_nav", page_llms_nav),

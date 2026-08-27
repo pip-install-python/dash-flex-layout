@@ -165,13 +165,21 @@ convenience copy, and template 1.6.24's rewrite of that file will
 remove it. That is fine; do not read its removal as permission to
 add an npm entry.
 
-Correction, 2026-08-26: this entry previously ended "The pip
-allow-list and the docker/actions ecosystems match the template."
-That is no longer true — template 1.6.24 removed the pip ecosystem
-outright (floors move through sync specs, not floor-raise PRs) and
-this fork has not yet consumed that file. The gap is UNSYNCED DRIFT,
-not divergence, and it is the 1.6.22-1.6.27 `sync-verbatim` block's
-to close.
+Correction, 2026-08-26 (morning): this entry previously ended "The
+pip allow-list and the docker/actions ecosystems match the
+template." That stopped being true when template 1.6.24 removed the
+pip ecosystem outright (floors move through sync specs, not
+floor-raise PRs) and this fork had not yet consumed that file. The
+gap was UNSYNCED DRIFT, not divergence — which is precisely why the
+file was left OUT of the byte-owned fence.
+
+CLOSED, 2026-08-26 (evening): the F3b fan-out delivered it —
+`8d2cc01` (PR #7, the 1.6.22-1.6.29 verbatim block). `md5`
+`.github/dependabot.yml` now equals the template's at `5589318`.
+The mechanical route worked exactly as the fence's reasoning
+predicted: had this file been fenced that morning to "protect" a
+difference this fork never chose, the fan-out would have skipped it
+and the drift would have needed a session. It needed none.
 
 ### 12. The image has no apt layer, and therefore no HEALTHCHECK
 
@@ -237,6 +245,43 @@ fork's in
 — the item's batch-1 correction (2026-08-25) records that home as
 satisfying it, because the pin is not auth-specific.
 
+### 15. `scripts/smoke_live.py` — this fork's copy is a SUPERSET
+
+A byte claim, and the reason the fence below is no longer empty.
+
+Both files descend from the same template ancestor, and the template
+has since gained three things this fork lacked — the cold-start wake
+loop, `fetch`'s retry ladder, and the 3c crawler/browser identity
+parity block. All three were ported here by hand on 2026-08-26
+(SYNC-1.6.22-1.6.29 items 5-6 §B/§D round), which is the whole of
+item 6's contract.
+
+What must NOT happen is the reverse direction. Measured at template
+1.6.29 (`5589318`), this fork's copy carries six check blocks the
+template's does not:
+
+| block | what it proves |
+|---|---|
+| `/healthz` names the running build | which COMMIT answered — cd.yml's build-match reads this |
+| `/healthz` claims this app's identity | `app == "flexlayout"`, not the template's key |
+| `/healthz` carries the geo diagnostic | the dimll >=2.7.0 floor really moved (the Docker layer-cache trap) |
+| prerender, browser lane | present / VISIBLE / per-page / exactly one h1 — the lane a curl cannot see |
+| `/api/agent-key` closed to anonymous | 204 and empty, or this host mints authority for strangers |
+| machine surfaces stay open | the llms.txt family answers an anonymous agent with prose during the crawl-demand window |
+
+Each was added by a session on THIS fork, for a defect measured on
+THIS host. A byte-copy of the template's file deletes all six
+silently and leaves a green CD run saying nothing is wrong — the
+worst possible failure shape, and the exact class item 5 exists to
+kill (a declaration nothing holds to reality).
+
+So the path is fenced. The fence is not a refusal to sync: item 6 is
+`contract` class as of 1.6.29 precisely because this file's
+behaviour, not its bytes, is what the fleet standardises. The port
+above is that contract, discharged by hand and pinned by
+`tests/test_smoke_live.py` (21 tests, including the template's
+transport ladder and wake-loop reference tests, adapted).
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
@@ -271,5 +316,28 @@ specs at template 1.6.27 (`055363e`) — the four kit files, plus
   `sync-verbatim` path (both are `# requires:` gates and explicitly
   session-class adapted halves), so neither belongs in this block.
 
+Re-audited 2026-08-26 (evening) against template 1.6.29 (`5589318`)
+after the F3b fan-out landed `8d2cc01`. The four kit files and
+`.github/dependabot.yml` and `tests/test_auth_demos.py` are all
+byte-identical to the template again (md5) — the block stayed empty
+through a whole mechanical round, which is the measurement working.
+
+ONE entry is added, and it is the first real one:
+
+- `scripts/smoke_live.py` — §15. It rode the `sync-verbatim` block
+  for exactly one round (1.6.28) and was pulled back out at 1.6.29
+  after landing red on 7 of 12 forks; this fork never received the
+  copy, because PR #7 arrived carrying the 1.6.29 block. That is
+  luck, not protection. This fork's copy is a documented SUPERSET —
+  six check blocks the template's file does not have — so a future
+  round that made the file cargo again would silently delete them.
+  The behaviour half of the same file IS synced: item 6's wake loop,
+  retry ladder and SSL context were all ported by hand in the same
+  touch as this entry.
+
 ```yaml byte-owned
+# See §15. Superset, not drift: the behaviour contract (item 6) is
+# ported by hand every round; the six fork-owned check blocks are
+# what this line protects.
+- scripts/smoke_live.py
 ```
