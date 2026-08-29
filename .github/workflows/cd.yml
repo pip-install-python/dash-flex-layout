@@ -2,15 +2,17 @@ name: CD
 
 # Deploys flexlayout.2plot.dev, then checks the live site.
 #
-# The deploy step POSTs to a Render deploy hook held in the
-# RENDER_DEPLOY_HOOK_URL secret. That secret stays UNSET fleet-wide (a
-# recorded decision): Render's autoDeploy owns deploy timing, and CD's job is
-# to wait for the resulting build and verify it. Setting the hook is opt-in
-# per repo and changes who owns deploy timing; it is never required.
+# THE ROAD (item 13, 2026-08-29): Render auto-deploys the `release` branch,
+# and ONLY this workflow writes `release` — a fast-forward push of the run's
+# own sha, after the CI matrix is green. A push to `main` is therefore not a
+# deploy; it is a candidate. This closes the class of failure where Render
+# watches the same branch CI is still judging: a push that goes red in CI can
+# no longer reach the wire, because nothing deploys `main` any more.
 #
-# Either way the wait below runs, and it waits for THIS RUN'S COMMIT — not
-# merely for a healthy response. Skipping the wait when the hook was unset is
-# what made this workflow verify the previous release on every run.
+# The Render deploy-hook step is GONE from this file; the repository secret
+# it read (the deploy-hook URL secret) is inert and safe to delete. `main`
+# ahead of `release` means an uncertified push is pending (its run red or
+# running) — never "drift", never a reason to deploy by hand (kit trap).
 #
 # (PyPI publishing is NOT here — release.yml owns that, tag-driven.)
 on:
@@ -58,36 +60,52 @@ jobs:
     environment:
       name: production
       url: https://flexlayout.2plot.dev
-    outputs:
-      deployed: ${{ steps.hook.outputs.deployed }}
+    # `contents: write` on THIS job only — it is the one thing in the
+    # workflow that writes to the repository (the `release` ref). The
+    # workflow-level grant above stays `read`.
+    permissions:
+      contents: write
     steps:
-      - name: Trigger the Render deploy hook
-        id: hook
-        env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      - uses: actions/checkout@v4
+        with:
+          # FULL history, not the default depth-1 shallow clone. A shallow
+          # HEAD pushed onto an EXISTING `release` is rejected as
+          # non-fast-forward ("fetch first") because the clone cannot show
+          # the remote that release's tip is an ancestor. The first promote
+          # succeeds regardless — it creates the branch — so this only bites
+          # the SECOND push onto an established release.
+          # tests/test_cd_promotes_release.py pins it.
+          fetch-depth: 0
+
+      - name: Promote to release
+        # Only a push to main promotes. A workflow_dispatch that names
+        # another host (target_url) is a verify-only run against that host
+        # and must not move this repo's release ref.
+        if: github.event_name == 'push' || inputs.target_url == ''
         run: |
-          if [ -z "$HOOK" ]; then
-            # ::warning, not ::notice — dash-email's finding (2026-08-23):
-            # with no hook AND a push Render's autoDeploy happened to skip,
-            # nothing deployed at all and the build-match wait below timed
-            # out on a deploy nobody had started. The wait refusing was
-            # honest; the quiet notice was why the cause took a run to see.
-            echo "::warning::RENDER_DEPLOY_HOOK_URL is not set — this push deploys only if render.yaml autoDeploy fires. The build-match wait below still holds for THIS commit either way."
-            echo "deployed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          curl -fsS -X POST "$HOOK" > /dev/null
-          echo "deployed=true" >> "$GITHUB_OUTPUT"
+          # Fast-forward push of the run's own sha. `needs: [test]` is the
+          # gate: a red matrix never reaches this step, so `release` cannot
+          # receive an uncertified commit by construction. On the FIRST run
+          # `release` does not exist yet and this push creates it.
+          #
+          # NOT --force, on purpose: a non-fast-forward means somebody wrote
+          # `release` by hand (a rollback, a hotfix). This job then FAILS
+          # and says so; a force here would silently undo that person.
+          #
+          # GITHUB_TOKEN pushes trigger no workflows — correct: `on:` is
+          # main-only, and it is Render, not Actions, that reacts to
+          # `release` (render.yaml `branch: release`, autoDeploy on).
+          git push origin "HEAD:refs/heads/release"
+          echo "::notice::release → ${GITHUB_SHA} (fast-forward)"
 
       - name: Wait for THIS build to serve traffic
-        # DELIBERATELY NOT gated on the hook step. With RENDER_DEPLOY_HOOK_URL
-        # unset — which is the fleet-wide decision, Render's own autoDeploy
-        # owns deploy timing — the old shape SKIPPED this wait entirely and
-        # ran the battery seconds after the push, against the PREVIOUS
-        # release. That defect was invisible for this workflow's whole life,
-        # because the previous release always already passed the previous
-        # battery; it only shows when a run adds a new surface. Found on
-        # muicharts 2026-08-21, fleet-wide class.
+        # Render deploys `release`, which the promote step above just set
+        # to this run's sha, so the wait is unchanged: hold until /healthz
+        # reports THIS build. Skipping this wait is what made an earlier
+        # shape of this workflow verify the previous release on every run —
+        # the previous release always already passed the previous battery,
+        # so the defect only showed when a run added a new surface. Found
+        # on muicharts 2026-08-21, fleet-wide class.
         run: |
           # A bare 200 proves nothing about WHICH build answered: a service
           # with a disk restarts with a blip rather than overlapping
@@ -128,7 +146,12 @@ jobs:
   verify:
     name: verify the live site
     needs: [deploy]
-    if: always() && needs.deploy.result != 'cancelled' && needs.deploy.result != 'skipped'
+    # ONLY after a successful deploy (item 13 fix-forward): the old
+    # `!= 'cancelled' && != 'skipped'` admitted `failure` too, so when the
+    # promote step failed this job ran anyway and reported GREEN — it had
+    # smoke-tested the PREVIOUS build. A verify that passes when nothing
+    # deployed must not exist.
+    if: needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -138,6 +161,20 @@ jobs:
           # Site lane — tracks the Dockerfile's FROM minor, same as ci.yml's
           # site-tests job (SYNC-1.6.22-1.6.29 item 5).
           python-version: "3.14"
+
+      - name: The live build IS this run's sha
+        # Belt to the `if:` above's braces, and stronger: it also catches a
+        # promote that succeeded while Render's build did not, or a later
+        # run that promoted past us between deploy and verify. Skipped on a
+        # workflow_dispatch against another host (its shas are not ours).
+        if: github.event_name == 'push' || inputs.target_url == ''
+        run: |
+          build="$(curl -fsS "$SITE_URL/healthz" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("build",""))')"
+          if [ "$build" != "$GITHUB_SHA" ]; then
+            echo "::error::verify refuses: $SITE_URL serves build '${build:-<none>}', this run is $GITHUB_SHA — nothing this run shipped is on the wire to verify"
+            exit 1
+          fi
+          echo "::notice::verifying build $build (this run's sha)"
 
       # The network battery first: it is the same script, with the same check
       # names, that CI ran against the container this deploy shipped. A name

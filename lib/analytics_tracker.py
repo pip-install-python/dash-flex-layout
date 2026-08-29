@@ -10,7 +10,27 @@ This ledger is the raw material for two things:
 
 Because the hub compares apps side by side, the fields written here match the
 hub's own ledger exactly: ``{timestamp, path, device_type, user_agent,
-bot_type?, ip_address?, location?}``.
+bot_type?, ip_address?, location?}``. Crawler rows (``device_type == "bot"``)
+additionally carry ``{vendor_key, vendor_class, verified, lane}`` since the
+2.8.0 floor; human rows are unchanged.
+
+Since the 2.8.0 floor the same file also holds a SECOND table, ``reads``: one
+row per corpus document dash-improve-my-llms served, handed to
+:meth:`record_read` through the package's ``on_document_read`` hook.
+``visits`` is what the request hook saw; ``reads`` is what the package says
+it served (tier, verdict, bytes, verified vendor). They are joined by
+``lib/traffic_rollup.py`` and never summed into each other.
+
+THERE IS ONE CLASSIFIER — ``dash_improve_my_llms.classify()``. This module
+used to carry its own User-Agent lists: they filed ClaudeBot (Anthropic's
+*training* crawler) under "search", still named the retired ``anthropic-ai``
+/ ``claude-web`` tokens, knew nothing of newer vendors, and counted every
+UA-less or library client (``httpx``, ``Go-http-client``) as a person. Every
+host in the network reported those numbers. The lists are gone —
+``is_bot`` / ``detect_bot_type`` keep their names (this fork's own tests call
+them directly) and delegate to the package's registry. A token the registry
+lacks and that matters for this fork's accounting is a pushback to the
+package seat, never a list kept here.
 
 Accuracy notes (these are the things that quietly wreck the numbers):
 
@@ -37,6 +57,9 @@ from functools import lru_cache
 
 import requests
 
+from dash_improve_my_llms import classify
+from dash_improve_my_llms._ledger import EVENT_FIELDS
+
 try:  # POSIX only — Windows dev boxes just run without the cross-process lock
     import fcntl
 except ImportError:  # pragma: no cover
@@ -56,6 +79,15 @@ FLUSH_INTERVAL_S = float(os.getenv("ANALYTICS_FLUSH_INTERVAL_S", "30"))
 # show recent local history.
 RETENTION_DAYS = int(os.getenv("ANALYTICS_RETENTION_DAYS", "45"))
 MAX_VISITS = int(os.getenv("ANALYTICS_MAX_VISITS", "20000"))
+
+# The read event carries the client address; it is dropped from the stored
+# row unless the operator opts in. Off by default for the same reason the
+# rest of this module prefers not to keep addresses it doesn't need.
+KEEP_CLIENT_IP = os.getenv("ANALYTICS_KEEP_CLIENT_IP", "0") == "1"
+
+# The keys a crawler row gains from classify(); a human row never carries
+# them, so the v3 rollup sees human rows byte-for-byte as before.
+_VENDOR_KEYS = ("vendor_key", "vendor_class", "verified", "lane")
 
 _IP_HEADERS = (
     "cf-connecting-ip",     # Cloudflare
@@ -182,6 +214,7 @@ class AnalyticsTracker:
     def __init__(self, data_file=None):
         self._data_file = Path(data_file) if data_file else None
         self._buffer = []
+        self._reads_buffer = []
         self._buffer_lock = threading.Lock()
         self._last_flush = time.time()
         atexit.register(self.flush)
@@ -196,6 +229,7 @@ class AnalyticsTracker:
             self.data_file.parent.mkdir(parents=True, exist_ok=True)
             self.data_file.write_text(json.dumps({
                 "visits": [],
+                "reads": [],
                 "stats": {
                     "desktop": 0,
                     "mobile": 0,
@@ -205,16 +239,20 @@ class AnalyticsTracker:
                 }
             }, indent=2))
 
-    def detect_device_type(self, user_agent):
-        """Detect device type from user agent string."""
-        if not user_agent:
-            return "desktop"
+    def detect_device_type(self, user_agent, classification=None):
+        """Detect device type from user agent string.
 
-        user_agent = user_agent.lower()
-
-        # Check for bots first
-        if self.is_bot(user_agent):
+        ``classification`` is an already-computed ``classify()`` result so a
+        caller that needs the vendor keys too classifies exactly once.
+        """
+        # Bots first — including the EMPTY User-Agent, which the package puts
+        # on the crawler lane (no browser sends none) and this method used to
+        # file as a desktop human.
+        c = classification if classification is not None else _classify(user_agent)
+        if c["lane"] == "crawler":
             return "bot"
+
+        user_agent = (user_agent or "").lower()
 
         # Check for tablet before mobile — iPads and most Android tablets also
         # carry a mobile token, so the mobile test would swallow them.
@@ -226,44 +264,20 @@ class AnalyticsTracker:
 
         return "desktop"
 
-    def is_bot(self, user_agent):
-        """Check if user agent is a bot."""
-        if not user_agent:
-            return False
+    def is_bot(self, user_agent, client_ip=None):
+        """Is this request on the crawler lane? Delegates to the package.
 
-        bot_patterns = [
-            'bot', 'crawler', 'spider', 'scraper', 'curl', 'wget',
-            'python-requests', 'gptbot', 'anthropic', 'claude',
-            'googlebot', 'bingbot', 'slurp', 'duckduckbot',
-            'perplexitybot', 'chatgpt', 'headlesschrome', 'phantomjs',
-            'monitoring', 'uptime', 'pingdom', 'better-uptime',
-        ]
+        Kept by name and signature for this fork's own tests — the body is
+        the one classifier now. Contract change from the lists this
+        replaced: an absent UA is a bot now, not a desktop visitor.
+        """
+        return _classify(user_agent, client_ip)["lane"] == "crawler"
 
-        return any(pattern in user_agent.lower() for pattern in bot_patterns)
-
-    def detect_bot_type(self, user_agent):
-        """Detect the type of bot from user agent."""
-        if not user_agent:
-            return "unknown"
-
-        user_agent = user_agent.lower()
-
-        # AI Training bots
-        training_bots = ['gptbot', 'anthropic-ai', 'claude-web', 'ccbot', 'google-extended', 'facebookbot']
-        if any(bot in user_agent for bot in training_bots):
-            return "training"
-
-        # AI Search bots
-        search_bots = ['chatgpt-user', 'claudebot', 'perplexitybot', 'youbot', 'oai-searchbot']
-        if any(bot in user_agent for bot in search_bots):
-            return "search"
-
-        # Traditional search bots
-        traditional_bots = ['googlebot', 'bingbot', 'slurp', 'duckduckbot', 'yandex', 'baidu']
-        if any(bot in user_agent for bot in traditional_bots):
-            return "traditional"
-
-        return "unknown"
+    def detect_bot_type(self, user_agent, client_ip=None):
+        """``training`` / ``search`` / ``traditional`` / ``unknown``, per the
+        package's vendor registry — the same buckets robots.txt is rendered
+        from, so what the site SAYS about a vendor and what it COUNTS agree."""
+        return _classify(user_agent, client_ip)["bot_type"] or "unknown"
 
     def get_geolocation(self, ip_address):
         """Get geolocation data from IP address (ip-api.com fallback path).
@@ -321,7 +335,14 @@ class AnalyticsTracker:
         if not path or not path.startswith('/') or path.startswith('//'):
             return
 
-        device_type = self.detect_device_type(user_agent)
+        # Resolve the REAL address first: `verified` is computed against the
+        # client, and behind Cloudflare/Render `ip_address` is the proxy.
+        ip_address = client_ip(headers, ip_address)
+
+        # Classify exactly once per request — lane, bucket and vendor come
+        # from the same call, so a row can never disagree with itself.
+        c = _classify(user_agent, ip_address)
+        device_type = self.detect_device_type(user_agent, classification=c)
 
         visit_data = {
             "timestamp": datetime.now().isoformat(),
@@ -330,11 +351,13 @@ class AnalyticsTracker:
             "user_agent": user_agent or "Unknown",
         }
 
-        # Add bot type if it's a bot
+        # Crawler rows carry the vendor identity; human rows are unchanged
+        # byte-for-byte (the v3 rollup's tests pin that shape).
         if device_type == "bot":
-            visit_data["bot_type"] = self.detect_bot_type(user_agent)
+            visit_data["bot_type"] = c["bot_type"] or "unknown"
+            for key in _VENDOR_KEYS:
+                visit_data[key] = c.get(key)
 
-        ip_address = client_ip(headers, ip_address)
         if ip_address:
             visit_data["ip_address"] = ip_address
 
@@ -351,9 +374,36 @@ class AnalyticsTracker:
                 # hits disk (the marker never survives into the ledger).
                 visit_data["_geo_pending"] = ip_address
 
+        self._enqueue(self._buffer, visit_data)
+
+    def record_read(self, event):
+        """Keep one read event from dash-improve-my-llms' ``on_document_read``.
+
+        Registered once in ``run.py``. The package hands over every key in
+        ``_ledger.EVENT_FIELDS`` for each corpus document it served — tier,
+        lane, vendor, verified, policy, verdict, status, bytes — and does no
+        I/O of its own. This is where the row is kept: the ``reads`` table of
+        the same ledger, same buffer discipline, same lock, same retention.
+
+        Called synchronously on the request path by the package, which also
+        catches anything raised here (fail-open, warned once). Keep it cheap:
+        it appends; the flush does the disk work.
+
+        ``client_ip`` is dropped unless ``ANALYTICS_KEEP_CLIENT_IP=1``.
+        """
+        if not isinstance(event, dict):
+            return
+        row = {k: event.get(k) for k in EVENT_FIELDS}
+        if not KEEP_CLIENT_IP:
+            row.pop("client_ip", None)
+        row["kind"] = "read"
+        self._enqueue(self._reads_buffer, row)
+
+    def _enqueue(self, buffer, row):
         with self._buffer_lock:
-            self._buffer.append(visit_data)
-            due = (len(self._buffer) >= FLUSH_EVERY
+            buffer.append(row)
+            pending = len(self._buffer) + len(self._reads_buffer)
+            due = (pending >= FLUSH_EVERY
                    or (time.time() - self._last_flush) >= FLUSH_INTERVAL_S)
         if due:
             self.flush()
@@ -368,17 +418,19 @@ class AnalyticsTracker:
         """
         with self._buffer_lock:
             pending, self._buffer = self._buffer, []
+            reads, self._reads_buffer = self._reads_buffer, []
             self._last_flush = time.time()
-        if not pending:
+        if not pending and not reads:
             return
         try:
             self._backfill_geo(pending)
-            self._write(pending)
+            self._write(pending, reads)
         except Exception:
             # Never lose the app over analytics; put the hits back so the next
             # flush can retry them.
             with self._buffer_lock:
                 self._buffer = pending + self._buffer
+                self._reads_buffer = reads + self._reads_buffer
 
     @staticmethod
     def _backfill_geo(pending):
@@ -397,7 +449,7 @@ class AnalyticsTracker:
             if loc:
                 v["location"] = loc
 
-    def _write(self, pending):
+    def _write(self, pending, reads=()):
         self._ensure_file_exists()
         path = self.data_file
         lock_path = path.with_suffix(path.suffix + ".lock")
@@ -411,10 +463,14 @@ class AnalyticsTracker:
                 if not isinstance(data, dict):
                     raise ValueError("ledger is not an object")
             except Exception:
-                data = {"visits": [], "stats": {"desktop": 0, "mobile": 0,
-                                                "tablet": 0, "bot": 0, "total": 0}}
+                data = {"visits": [], "reads": [],
+                        "stats": {"desktop": 0, "mobile": 0,
+                                  "tablet": 0, "bot": 0, "total": 0}}
 
             visits = data.setdefault("visits", [])
+            # A ledger written before the reads table existed has no
+            # `reads` key at all; absence reads as empty.
+            read_rows = data.setdefault("reads", [])
             stats = data.setdefault("stats", {})
             # Internal markers stay on the buffered copy (for a retry) and
             # never reach the ledger.
@@ -426,6 +482,8 @@ class AnalyticsTracker:
                 stats["total"] = stats.get("total", 0) + 1
 
             data["visits"] = _prune(visits)
+            read_rows.extend(reads)
+            data["reads"] = _prune(read_rows, stamp=_read_stamp)
 
             # Atomic replace: a crash mid-write can't leave a truncated ledger.
             tmp = path.with_suffix(path.suffix + ".tmp")
@@ -440,14 +498,43 @@ class AnalyticsTracker:
                     lock_fh.close()
 
 
-def _prune(visits):
-    """Drop hits older than the retention window, then cap the total."""
+def _visit_stamp(v):
+    return v.get("timestamp") or ""
+
+
+def _read_stamp(r):
+    """Read rows carry the package's epoch ``ts``; compare on the same ISO
+    axis the visit rows use so one retention rule covers both tables."""
+    ts = r.get("ts")
+    try:
+        return datetime.fromtimestamp(float(ts)).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+
+
+def _prune(rows, stamp=_visit_stamp):
+    """Drop rows older than the retention window, then cap the total."""
     if RETENTION_DAYS > 0:
         cutoff = (datetime.now() - timedelta(days=RETENTION_DAYS)).isoformat()
-        visits = [v for v in visits if (v.get("timestamp") or "") >= cutoff]
-    if MAX_VISITS > 0 and len(visits) > MAX_VISITS:
-        visits = visits[-MAX_VISITS:]
-    return visits
+        rows = [v for v in rows if stamp(v) >= cutoff]
+    if MAX_VISITS > 0 and len(rows) > MAX_VISITS:
+        rows = rows[-MAX_VISITS:]
+    return rows
+
+
+def _classify(user_agent, client_ip=None):
+    """The one classifier, made total: never raises, always has ``lane``."""
+    try:
+        c = classify(user_agent or "", client_ip)
+    except Exception:
+        c = {}
+    return {
+        "lane": c.get("lane") or "browser",
+        "bot_type": c.get("bot_type"),
+        "vendor_key": c.get("vendor_key"),
+        "vendor_class": c.get("vendor_class"),
+        "verified": c.get("verified") or "n/a",
+    }
 
 
 # Global tracker instance

@@ -389,3 +389,20 @@ they win.
   the same sha — key on the workflow path (cd.yml) instead.
 - The browser lane and the machine lane are different documents;
   a fix proven on one is unproven on the other.
+- There is ONE classifier: `dash_improve_my_llms.classify()`. Never
+  add a User-Agent list to this app — `lib/analytics_tracker.py`
+  carried one for a year, it filed ClaudeBot as *search* (it is
+  Anthropic's TRAINING crawler), it still named the retired
+  `anthropic-ai` / `claude-web` tokens, and it counted every UA-less
+  or library client as a human. A token the registry lacks is a
+  pushback to the package seat, not a list here;
+  `tests/test_analytics_classifier.py` greps the module for the old
+  tokens and goes red if one comes back.
+- `build == HEAD` on `/healthz` means HEAD of **`release`**, not
+  `main` (item 13, 2026-08-29). Render deploys `release`; only
+  cd.yml's `deploy` job writes it, fast-forward, after the CI matrix
+  is green. `main` ahead of `release` is an uncertified push pending
+  — its CD run is red or still running — never "drift" and never a
+  reason to deploy by hand or write `release` yourself (a
+  non-fast-forward push fails the next run on purpose). Compare the
+  wire against `git rev-parse origin/release`, not `origin/main`.

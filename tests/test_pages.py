@@ -21,11 +21,11 @@ REQUIRED_PATHS = {
     "/theming",
 }
 
-# The owner-only control board. It is a real registered page, so it turns up
-# in `page_paths`, but it is not documentation: no prose is registered for it,
-# it is mark_hidden() from every machine surface, and it fails closed. Loops
-# that assert documentation properties skip it.
-ADMIN_PATHS = {"/admin/control-board"}
+# The owner-only admin pages. Real registered pages, so they turn up in
+# `page_paths`, but neither is documentation: no prose is registered for
+# either, both are mark_hidden() from every machine surface, and both fail
+# closed. Loops that assert documentation properties skip them.
+ADMIN_PATHS = {"/admin/control-board", "/admin/traffic"}
 
 
 def docs_paths(page_paths):
@@ -147,7 +147,7 @@ def test_prerender_rides_the_generic_lane_not_a_ua_gate(client):
             f"{path}: the prerender div carries `hidden` again — "
             "visibility-respecting consumers are back to reading "
             "'Loading...'; the floor first moved (to 2.6.1) for exactly "
-            "this, and sits at >=2.7.1 now"
+            "this, and sits at >=2.8.0 now"
         )
         assert 'data-dimll-prerender="1">document.getElementById' in html, (
             f"{path}: the marked synchronous hide script is missing — "

@@ -99,16 +99,24 @@ pydantic>=2.3.0
 #          hardened so a page that merely MENTIONS the prerender marker no
 #          longer loses its prerender. Also lands the geo guardrail seams
 #          that lib/health.py's /healthz block reports.
-#   2.7.1  THE CURRENT FLOOR — llms.txt v2: discovery relations
-#          (rel=alternate/describedby on both lanes) plus Link headers, the
-#          Accept: text/plain ramp, and the representation content digest.
-#          These are the surfaces the network's agent lane composes over.
-#          run.py's boot floor, .github/workflows/ci.yml's two fingerprint
-#          asserts and tests/test_pages.py all encode this number — grep it,
-#          never move one alone. AND REMEMBER THE CACHE TRAP: this line
-#          changing IS the Docker cache bust (see the Dockerfile). A `>=`
-#          floor can never pull a newer release through a cache hit.
-dash-improve-my-llms[flask]>=2.7.1
+#   2.7.1  llms.txt v2: discovery relations (rel=alternate/describedby on
+#          both lanes) plus Link headers, the Accept: text/plain ramp, and
+#          the representation content digest. These are the surfaces the
+#          network's agent lane composes over.
+#   2.8.0  THE CURRENT FLOOR — the ledger floor. ONE classifier —
+#          `classify()` is the same registry robots.txt is rendered from,
+#          and lib/analytics_tracker.py delegates to it instead of carrying
+#          a fourth UA list (the old list filed ClaudeBot, Anthropic's
+#          TRAINING crawler, under "search"). `on_document_read` hands the
+#          app one row per corpus document served (tier, verdict, bytes,
+#          verified vendor), kept as the ledger's `reads` table and rolled
+#          up in lib/traffic_rollup.py's v4 payload. run.py's boot floor,
+#          .github/workflows/ci.yml's two fingerprint asserts and
+#          tests/test_pages.py all encode this number — grep it, never move
+#          one alone. AND REMEMBER THE CACHE TRAP: this line changing IS the
+#          Docker cache bust (see the Dockerfile). A `>=` floor can never
+#          pull a newer release through a cache hit.
+dash-improve-my-llms[flask]>=2.8.0
 
 # Default backend + production WSGI server. gunicorn 21.x carried two
 # request-smuggling CVEs (CVE-2024-6827, CVE-2024-1135); >=23 is the network

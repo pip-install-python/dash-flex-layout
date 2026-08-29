@@ -2,7 +2,7 @@
 
 A lean, Flask-only Dash app that renders the markdown docs under ``docs/`` and
 serves AI/LLM + SEO surfaces (/llms.txt, /<page>/llms.txt, /robots.txt,
-/sitemap.xml) via dash-improve-my-llms >= 2.7.1.
+/sitemap.xml) via dash-improve-my-llms >= 2.8.0.
 
 Deployed at https://flexlayout.2plot.dev as a 2plot network satellite:
 
@@ -86,6 +86,7 @@ from lib.satellite_reporter import start_reporter
 from dash_improve_my_llms import (
     add_llms_routes,
     LLMSConfig,
+    on_document_read,
     RobotsConfig,
     register_page_metadata,
 )
@@ -119,7 +120,20 @@ ALLOW_STALE_DEPS = os.environ.get("ALLOW_STALE_DEPS", "0") == "1"
 # both lanes + Link headers, the Accept: text/plain ramp, and the
 # representation digest — the surfaces the network's agent lane composes over.
 # tests/test_pages.py pins the single-H1 shape on EVERY page.
-LLMS_PKG_FLOOR = (2, 7, 1)
+#
+# 2.8.0 is the ledger floor (2026-08-29): ONE classifier — `classify()` is the
+# same registry robots.txt is rendered from, and lib/analytics_tracker.py now
+# delegates to it instead of carrying a fourth UA list (the old list filed
+# ClaudeBot — Anthropic's TRAINING crawler — under "search" and still named
+# the retired anthropic-ai/claude-web tokens). The READ EVENT —
+# `on_document_read` hands this app one row per corpus document served (tier,
+# verdict, bytes, verified vendor) — is kept as the ledger's `reads` table
+# next to `visits`, joined (never summed) by lib/traffic_rollup.py's v4
+# payload. `verified` is `n/a` where the operator publishes no IP ranges —
+# Anthropic does not, so ClaudeBot is always `n/a`. 2.8.1 will write a
+# resolved `policy` on every event; until then it is None and the rollup
+# groups it as "default" — nothing here waits on it.
+LLMS_PKG_FLOOR = (2, 8, 0)
 
 
 def _version(text: str) -> tuple:
@@ -149,6 +163,10 @@ if LLMS_PKG_FLOOR > _version(LLMS_PKG_VERSION):
     detail = (
         f"dash-improve-my-llms {LLMS_PKG_VERSION} is below the "
         f"{'.'.join(str(n) for n in LLMS_PKG_FLOOR)} floor in requirements.txt. "
+        "Below 2.8.0 there is no `classify()` and no `on_document_read`: the "
+        "tracker cannot delegate bot classification and no read row is ever "
+        "kept, so the ledger's `reads` table and rollup v4's vendors[] stay "
+        "empty (ImportError at boot, not a silent degrade). "
         "Below 2.7.1 the llms.txt v2 discovery relations (rel=alternate/"
         "describedby + Link headers), the text/plain Accept ramp, and the "
         "representation digest are missing. Below 2.7.0 every page serves a "
@@ -418,6 +436,17 @@ ACCESS_ENABLED = _access.configure(
 # live in templates/index.html — see the rule documented there).
 # Works on the Flask backend with no extra gating.
 add_llms_routes(app, LLMSConfig(warn_missing_llms_doc=True))
+
+# The ledger row (dimll 2.8.0): the package emits one event per corpus
+# document it serves and does no I/O with it; the tracker keeps it as the
+# `reads` table next to `visits` (lib/analytics_tracker.record_read).
+# Registered ONCE — the test suite imports run.py more than once per
+# process and `on_document_read` appends, so a marker on the callback's
+# owner guards the second import (the package also dedups an identical
+# callable; belt and braces).
+if not getattr(tracker, "_read_hook_registered", False):
+    on_document_read(tracker.record_read)
+    tracker._read_hook_registered = True
 
 # The hub's announcement feed, rendered in the llms.txt viewer's header
 # (lib/bulletin.py). A function that returns whether it wired, and a boot

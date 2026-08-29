@@ -282,6 +282,36 @@ above is that contract, discharged by hand and pinned by
 `tests/test_smoke_live.py` (21 tests, including the template's
 transport ladder and wake-loop reference tests, adapted).
 
+### 16. Render deploys `release`; only CD writes it (item 13, 2026-08-29)
+
+Render's Blueprint `branch:` is `release`, not `main`, and `cd.yml`'s
+`deploy` job is the only writer — a fast-forward push of the run's own
+commit, gated on `needs: [test]`, after `actions/checkout@v4` with
+`fetch-depth: 0` (a shallow clone pushed onto an existing `release` is
+rejected as non-fast-forward). A push to `main` is therefore a
+*candidate*, not a deploy: nothing serves it until CI is green and the
+promote step runs. `verify` runs ONLY on `needs.deploy.result ==
+'success'` and its first step re-asserts `/healthz` build == this run's
+sha before running the battery — a verify that passes against a build
+nothing this run shipped must not exist.
+
+The old shape POSTed to a Render deploy hook (`RENDER_DEPLOY_HOOK_URL`,
+left unset fleet-wide) and let Render's `autoDeploy` watch `main`
+directly. That means Render could build a commit CI was still judging —
+the class of failure item 13 closes. The secret name is deliberately not
+spelled out in `cd.yml`'s prose (item 13's own detect greps the file for
+it); the repo secret itself is inert now and safe to delete.
+
+`build == HEAD` on `/healthz` means HEAD of `origin/release`, never
+`origin/main` — see the `.claude/CLAUDE.md` trap. `main` ahead of
+`release` is an uncertified push pending, never drift, never a reason to
+deploy by hand or write to `release` directly.
+
+OWNER STEP, not done by this session: if the Render service is not
+Blueprint-managed, `render.yaml`'s `branch:` is documentation only and
+the dashboard's Branch field is the actual switch — the owner flips it
+after the promote step is proven green on the wire.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
@@ -340,4 +370,20 @@ ONE entry is added, and it is the first real one:
 # ported by hand every round; the six fork-owned check blocks are
 # what this line protects.
 - scripts/smoke_live.py
+```
+
+## What this host serves
+
+Declares posture facts a sync session should check against, not
+restate from memory (sync/README.md's second fence). `ai_bots` and
+`healthz` need a live probe with a real vendor UA to state honestly —
+not yet measured for this host in this format, so they are omitted
+rather than guessed; a future `/wire-verify` pass should add them and
+paste the probe in its report. `deploy` is added now (§16): Render
+watches `release`, and only `cd.yml`'s promote step writes it — see
+§16 and the `.claude/CLAUDE.md` trap for the `build == HEAD` reading
+this implies.
+
+```yaml posture
+deploy: release-branch
 ```

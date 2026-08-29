@@ -91,18 +91,21 @@ jobs:
               return tuple(int(x) for x in v.split(".")[:3] if x.isdigit())
 
           assert parts(dash.__version__)[:2] >= (4, 2), dash.__version__
-          # 2.7.1 is the network floor, and run.py refuses to boot below it.
-          # Below 2.7.1 the llms.txt v2 discovery relations, the text/plain
-          # Accept ramp and the representation digest are missing; below 2.7.0
-          # every page serves a DUPLICATE H1 to crawlers and a page that merely
-          # MENTIONS the prerender marker loses its prerender; below 2.6.1 the
+          # 2.8.0 is the network floor, and run.py refuses to boot below it.
+          # Below 2.8.0 there is no `classify()` and no `on_document_read` —
+          # the tracker cannot delegate bot classification and the ledger's
+          # `reads` table / rollup v4 vendors[] stay empty; below 2.7.1 the
+          # llms.txt v2 discovery relations, the text/plain Accept ramp and
+          # the representation digest are missing; below 2.7.0 every page
+          # serves a DUPLICATE H1 to crawlers and a page that merely MENTIONS
+          # the prerender marker loses its prerender; below 2.6.1 the
           # universal prerender ships `hidden`, so every visibility-respecting
           # consumer reads "Loading..." instead of the page's prose; below
           # 2.6.0 `lastmod=` is silently swallowed and the sitemap reverts to
           # invented dates; below 2.5.1 configure_seo does not exist. Grep the
           # NUMBER when bumping — it lives here, in the docker job below, in
           # requirements.txt and in run.py's LLMS_PKG_FLOOR.
-          assert parts(pkg.__version__) >= (2, 7, 1), pkg.__version__
+          assert parts(pkg.__version__) >= (2, 8, 0), pkg.__version__
           # 21.x carried two request-smuggling CVEs (CVE-2024-6827,
           # CVE-2024-1135). markdown2dash's spurious <22 pin must not win.
           assert parts(gunicorn.__version__)[:2] >= (23, 0), gunicorn.__version__
@@ -244,7 +247,7 @@ jobs:
 
           v = version('dash-improve-my-llms')
           print('dash-improve-my-llms', v)
-          assert parts(v) >= (2, 7, 1), f'expected >=2.7.1 (llms.txt v2 relations, single-H1 prerender), image has {v}'
+          assert parts(v) >= (2, 8, 0), f'expected >=2.8.0 (classify()/on_document_read ledger, llms.txt v2 relations, single-H1 prerender), image has {v}'
 
           # The DMC floor. Below 2.8.0 the network-standard mobile drawer
           # renders as a floating card from identical props — nothing errors,

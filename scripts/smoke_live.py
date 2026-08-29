@@ -424,7 +424,7 @@ def main(base: str) -> int:
               "no #dimll-prerender for a browser — the universal lane is off or UA-gated")
         if div:
             check(f"prerender is VISIBLE on {path}", "hidden" not in div.group(0),
-                  f"{div.group(0)} — carries `hidden`; the floor first moved (to 2.6.1) for exactly this, and sits at >=2.7.1 now")
+                  f"{div.group(0)} — carries `hidden`; the floor first moved (to 2.6.1) for exactly this, and sits at >=2.8.0 now")
         check(f"prerender hide script marked on {path}",
               'data-dimll-prerender="1">document.getElementById' in html,
               "the marked synchronous hide script is missing — JS browsers "

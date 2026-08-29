@@ -34,6 +34,10 @@ services:
     # /healthz is the 2plot network convention (lib/health.py) and is excluded
     # from traffic counts, so it makes a cleaner check than /.
     healthCheckPath: /healthz
+    # Item 13 (2026-08-29): Render deploys `release`, never `main` directly.
+    # Only cd.yml's promote step (needs: [test]) writes `release`, so a build
+    # here is always a certified commit — never a push CI hasn't judged yet.
+    branch: release
     autoDeploy: true
     envVars:
       # --- Core --------------------------------------------------------

@@ -10,11 +10,12 @@ from conftest import BROWSER_ACCEPT, CRAWLER_UA
 from lib import network_directory as nd
 from lib.constants import BASE_URL
 
-# The owner-only control board. A registered page, so it appears in
-# `page_paths`, but it registers no prose, is mark_hidden() from every machine
-# surface (so /<page>/llms.txt 404s by design) and is excluded from the
-# sitemap. Every loop below asserts DOCUMENTATION properties, so it is skipped.
-ADMIN_PATHS = {"/admin/control-board"}
+# The owner-only admin pages. Registered pages, so they appear in
+# `page_paths`, but they register no prose, are mark_hidden() from every
+# machine surface (so /<page>/llms.txt 404s by design) and are excluded from
+# the sitemap. Every loop below asserts DOCUMENTATION properties, so both are
+# skipped.
+ADMIN_PATHS = {"/admin/control-board", "/admin/traffic"}
 
 
 def docs_paths(page_paths):
