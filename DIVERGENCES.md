@@ -312,6 +312,58 @@ Blueprint-managed, `render.yaml`'s `branch:` is documentation only and
 the dashboard's Branch field is the actual switch — the owner flips it
 after the promote step is proven green on the wire.
 
+### 17. Navigation contract (item 16, 2026-08-30) — this fork's identity choices
+
+`components/navbar.py`, `components/footer.py`, `lib/aside.py`,
+`lib/api_reference.py`, `pages/changelog.py` and `pages/api.py` are now
+the template's generic, registry-driven shape — no fork content,
+cargo-eligible on the next mechanical round. NOT byte-identical to the
+template at commit `8ceca5c` — diffed and confirmed the gap is comment
+wording only ("item 16" vs "1.6.39", one kept docstring note on
+navbar.py's DMC-floor comment) plus, in `pages/api.py`, a module
+docstring that correctly names THIS fork's own `API_PACKAGES` declaration
+instead of the template's "the template documents nothing" placeholder
+text — code bodies match. `components/header.py` and
+`components/appshell.py` differ more, where this fork's own identity or
+Flask-only shape requires it, noted below. The fork's own choices live in
+`lib/constants.py`'s navigation block and in these adaptations:
+
+- **Backend badge, Flask-only.** DIVERGENCES §2: this fork has no
+  `lib/backend.py` and no pluggable backend at all — Flask is hardcoded
+  in `run.py`. `components/header.py::create_backend_badge()` is a
+  static "Flask" badge rather than an import from a `lib.backend` module
+  this fork does not carry; there is nothing to detect.
+- **`/reference` and `/api` coexist, deliberately.** `docs/reference/reference.md`
+  is hand-written narrative (the model schema, usage guidance) that
+  embeds `.. kwargs::` prop tables inline; `/api` is the auto-generated
+  raw prop dump from `flexlayout_dash/metadata.json`. `/api` supplements
+  `/reference`, it does not replace it — both stay registered, and both
+  are in the sidebar (Reference under its own category, API in its own
+  section). `API_PACKAGES = ["flexlayout_dash"]`, this fork's own
+  package.
+- **The header keeps a PyPI icon link** alongside the contract's GitHub
+  icon — not in the contract list, kept because this IS a PyPI-published
+  package and the docs site's whole purpose is documenting it. No test
+  forbids it; `tests/test_nav_contract.py` only pins the contract's
+  MINIMUM surface.
+- **`lib/renderer.py`'s bold/italic `<p>`-nesting fix stays**, unreplaced
+  by `markdown2dash.create_parser`: `pages/markdown.py` still builds its
+  parser from `lib.renderer.create_parser` (the fork-local
+  `PatchedDashRenderer` subclass), and `lib/directives/headings.py`'s
+  `patch_renderer()` monkeypatches `DashRenderer.heading`/`image` on the
+  BASE class before that subclass is instantiated — since the subclass
+  overrides neither method, it inherits both patches. Two fixes, one
+  parser, verified in `pages/markdown.py`'s docstring.
+- **The H1-preamble guard (§5) is untouched.** The template's own
+  `pages/markdown.py` at 1.6.38 drops the fence-aware `_first_heading_level`
+  guard entirely and always prepends `# {name}` to the LLMS_DOC — which
+  would reintroduce the duplicate-H1 defect §5 exists to prevent on
+  `docs/home/home.md`. Not ported; this fork's guard stays.
+- **`DISCORD_URL`/`YOUTUBE_URL` moved to the network-wide values**
+  (`discord.gg/e5s5uHWUHH`, `youtube.com/@2plotai`) from this fork's
+  previous vanity Discord invite and personal YouTube channel — the
+  owner's 2026-08-30 decision, not a per-fork choice.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites

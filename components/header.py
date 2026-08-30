@@ -2,7 +2,8 @@ import dash_mantine_components as dmc
 from dash import Output, Input, State, clientside_callback
 from dash_iconify import DashIconify
 
-from lib.constants import HEADER_HEIGHT
+from components.navbar import search_data
+from lib.constants import API_PACKAGES, BASE_URL, GITHUB_URL, HEADER_HEIGHT
 
 
 def create_clerk_avatar():
@@ -53,8 +54,112 @@ def create_link(icon, href, label):
     )
 
 
+def create_backend_badge():
+    """This host's backend, as a small header badge.
+
+    DIVERGENCES.md §2: this fork carries no `lib/backend.py` and no
+    pluggable backend selection at all — it is Flask-only by construction,
+    hardcoded in run.py's `register_health_route(app, "flask")` call. So
+    unlike a multi-backend fork, there is nothing to DETECT here; the
+    badge just states the one fact truthfully rather than being absent
+    (item 16: "backend badge (absent — add it, Flask-only is fine)").
+    """
+    return dmc.Badge(
+        "Flask",
+        variant="light",
+        color="gray",
+        radius="sm",
+        styles={"root": {"textTransform": "none", "fontWeight": 600}},
+        **{"aria-label": "Served by the Flask backend"},
+    )
+
+
+def create_other_apps_menu():
+    """*Other Apps* — the network, from ONE registry (item 16).
+
+    A hover menu in the top bar (the 2plot.dev shape the owner named as the
+    reference), populated from lib.network_directory: the PRIMARY entries
+    of PEERS + AFFILIATED, this app omitted, labelled by domain. The
+    sidebar carries no network section any more — this is the only place
+    the network is listed, so it cannot be listed twice.
+    """
+    from lib.network_directory import other_apps_for
+
+    return dmc.Menu(
+        [
+            dmc.MenuTarget(
+                dmc.Button(
+                    "Other Apps",
+                    variant="subtle",
+                    color="gray",
+                    size="sm",
+                    leftSection=DashIconify(icon="svg-spinners:blocks-scale", width=18),
+                    visibleFrom="md",
+                    id="other-apps-menu-target",
+                )
+            ),
+            dmc.MenuDropdown(
+                [
+                    dmc.MenuItem(
+                        entry["label"],
+                        leftSection=DashIconify(icon=entry["icon"], width=16),
+                        href=entry["url"],
+                        target="_blank",
+                    )
+                    for entry in other_apps_for(BASE_URL)
+                ],
+                id="other-apps-menu",
+                # Solid, themed panel: near-transparent with washed-out
+                # items in dark mode otherwise.
+                styles={"dropdown": {
+                    "backgroundColor": "var(--mantine-color-body)",
+                    "border": "1px solid var(--mantine-color-default-border)",
+                    "boxShadow": "var(--mantine-shadow-md)",
+                }},
+            ),
+        ],
+        trigger="hover",
+        openDelay=100,
+        closeDelay=200,
+    )
+
+
+def _package_version():
+    """The documented component package's version, or None."""
+    if not API_PACKAGES:
+        return None
+    try:
+        from importlib.metadata import version
+
+        return version(API_PACKAGES[0].replace("_", "-"))
+    except Exception:
+        try:
+            import importlib
+
+            return getattr(importlib.import_module(API_PACKAGES[0]), "__version__", None)
+        except Exception:
+            return None
+
+
+def create_version_badge():
+    """`v<version>` of the documented package, when the fork declares one."""
+    v = _package_version()
+    if not v:
+        return None
+    return dmc.Badge(
+        f"v{v}",
+        variant="light",
+        color="gray",
+        radius="sm",
+        styles={"root": {"textTransform": "none", "fontWeight": 600}},
+        **{"aria-label": f"{API_PACKAGES[0]} version {v}"},
+    )
+
+
 def create_search(data):
-    """Create searchable dropdown for page navigation"""
+    """Searchable dropdown for page navigation — the sidebar's pages and
+    nothing else (never /admin/*, never hidden-tier; components/navbar
+    decides)."""
     return dmc.Select(
         id="select-component",
         placeholder="Search pages...",
@@ -64,13 +169,10 @@ def create_search(data):
         size="sm",
         nothingFoundMessage="No pages found",
         leftSection=DashIconify(icon="mingcute:search-3-line", width=18),
-        data=[
-            {"label": component["name"], "value": component["path"]}
-            for component in data
-            if component["name"] not in ["Home", "Not found 404"]
-        ],
+        data=search_data(data),
         visibleFrom="sm",
         comboboxProps={"zIndex": 2000},
+        **{"aria-label": "Search pages"},
         styles={
             "input": {
                 "borderColor": "var(--mantine-color-gray-4)",
@@ -149,10 +251,14 @@ def create_header(data):
                     gap="md",
                 ),
 
-                # Right section: Search + PyPI + GitHub + Theme toggle
+                # Right section: backend badge + version + search + Other Apps
+                # + PyPI + GitHub + theme toggle + Clerk avatar (when on)
                 dmc.Group(
                     [
+                        dmc.Box(create_backend_badge(), visibleFrom="sm"),
+                        dmc.Box(create_version_badge(), visibleFrom="sm"),
                         create_search(data),
+                        create_other_apps_menu(),
                         create_link(
                             "simple-icons:pypi",
                             "https://pypi.org/project/flexlayout-dash/",
@@ -160,7 +266,7 @@ def create_header(data):
                         ),
                         create_link(
                             "radix-icons:github-logo",
-                            "https://github.com/pip-install-python/dash-flex-layout",
+                            GITHUB_URL,
                             "View the source on GitHub",
                         ),
                         dmc.ActionIcon(

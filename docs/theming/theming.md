@@ -2,6 +2,8 @@
 name: Theming
 description: Automatic Mantine light/dark integration.
 endpoint: /theming
+category: Theming
+order: 1
 icon: mdi:palette-outline
 lastmod: 2026-08-01
 ---

@@ -187,9 +187,70 @@ def internal_ua(caller: str = "") -> str:
 
 
 # 2plot network links, surfaced in the README and the docs footer/header.
+# GITHUB_URL is the REPOSITORY (the top bar's icon and JSON-LD `sameAs`);
+# GITHUB_PROFILE_URL below is the owner (the footer's icon) — muischeduler
+# shipped the icon pointing at the profile while its `sameAs` named the
+# repo, two truths, one of them wrong (item 16, 2026-08-30).
 GITHUB_URL = "https://github.com/pip-install-python/dash-flex-layout"
-DISCORD_URL = "https://discord.gg/WEnZR35mrK"
-YOUTUBE_URL = "https://www.youtube.com/channel/UC6Bmo0t0ZUpU_xKBYW0bJuQ"
+# Network-wide community links (item 16, 2026-08-30 owner decision) —
+# identical on every host; this fork previously carried its own vanity
+# Discord invite and a personal YouTube channel, neither of which anyone
+# maintained. DMC_URL is Resources' first entry.
+DISCORD_URL = "https://discord.gg/e5s5uHWUHH"
+YOUTUBE_URL = "https://www.youtube.com/@2plotai"
+YOUTUBE_SUBSCRIBE_URL = YOUTUBE_URL + "?sub_confirmation=1"
+DMC_URL = "https://www.dash-mantine-components.com/"
+
+# The owner's profile — the FOOTER's GitHub link (the repo is the top bar's).
+GITHUB_PROFILE_URL = "https://github.com/pip-install-python"
+
+# ---------------------------------------------------------------------------
+# Navigation contract (item 16, 2026-08-30) — the parts of the sidebar/top
+# bar that are IDENTICAL on every host come from template code
+# (components/navbar.py, components/header.py, components/footer.py) and
+# these constants; the app's own sections come from each doc's frontmatter
+# (`category:` + `order:`). A fork edits THIS block and its docs'
+# frontmatter, never the components/ files.
+# ---------------------------------------------------------------------------
+
+# The app's own sections, in sidebar order — this fork's six topic pages,
+# each its own category (the muischeduler shape the owner named as
+# reference: one short category per topic, not one big "Documentation"
+# bucket). Categories not listed here follow these, alphabetically.
+CATEGORY_ORDER = [
+    "Getting Started",
+    "Basic Layouts",
+    "Borders & Sidebars",
+    "Theming",
+    "Callbacks",
+    "Reference",
+]
+
+# The upstream project this component wraps — rendered as the last
+# Resources link. FlexLayout-React is the library flexlayout-dash ports;
+# linking it is the "for a component built on an upstream project" rule
+# from the design brief.
+UPSTREAM = {"name": "FlexLayout (React)", "url": "https://github.com/caplin/FlexLayout"}
+
+# The component package /api documents. One package, the one this whole
+# site exists to document; the version badge in the header reads its
+# installed __version__.
+API_PACKAGES = ["flexlayout_dash"]
+
+
+def resources() -> list:
+    """The sidebar's Resources section: THIRD-PARTY ONLY (owner, 2026-08-30).
+    `dmc` and the upstream project this component wraps — never the owner's
+    own links (repo, Discord, YouTube), which live in the top bar and the
+    footer; no community.plotly.com; no 2plot.dev (the network is the Other
+    Apps menu, not a sidebar link)."""
+    items = [
+        {"label": "dmc", "url": DMC_URL, "icon": "ic:baseline-design-services"},
+    ]
+    if UPSTREAM:
+        items.append({"label": UPSTREAM["name"], "url": UPSTREAM["url"],
+                      "icon": UPSTREAM.get("icon", "mdi:layers-outline")})
+    return items
 
 # Height of the fixed AppShell header, in px. Consumed by AppShell(header=...),
 # components/header.py's Group, and the mobile drawer, which docks itself

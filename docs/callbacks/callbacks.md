@@ -2,6 +2,8 @@
 name: Callbacks
 description: Read layout state and drive content from Dash callbacks.
 endpoint: /callbacks
+category: Callbacks
+order: 1
 icon: mdi:function-variant
 lastmod: 2026-08-01
 ---

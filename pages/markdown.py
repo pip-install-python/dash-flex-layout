@@ -15,7 +15,8 @@ from lib.ad_client import inject_ad_into_aside
 # as <p>, nesting a <p> inside the paragraph's own <p>. See lib/renderer.py.
 from lib.renderer import create_parser
 from lib.constants import OG_IMAGE_URL, PAGE_TITLE_PREFIX, NAME_CONTENT_MAP
-from lib import gate_layouts, page_tiers, page_visibility
+from lib import aside, gate_layouts, page_tiers, page_visibility
+from lib.directives.headings import patch_renderer
 from lib.directives.kwargs import Kwargs
 from lib.directives.llms_copy import LlmsCopy
 from lib.directives.source import SC
@@ -38,6 +39,8 @@ class Meta(BaseModel):
     package: str = "flexlayout_dash"
     category: Optional[str] = None
     icon: Optional[str] = None
+    # Sidebar position within its category (item 16); ties break on name.
+    order: int = 1000
     # Who may read this page: public | auth | admin | hidden. Absent means
     # the deployment default (PAGE_DEFAULT_TIER, else public) — see
     # lib/page_tiers.py for the tier model and why the default is open.
@@ -180,6 +183,12 @@ def _build_llms_doc(name: str, description: str, expanded_markdown: str, path: s
     return "\n".join(parts)
 
 
+# Heading ids that survive inline formatting, and inline `![alt](src)` image
+# rendering. Must run before create_parser() instantiates the renderer.
+# lib/renderer.py's PatchedDashRenderer subclasses markdown2dash's
+# DashRenderer without overriding heading/image, so it inherits the patch.
+patch_renderer()
+
 directives = [Admonition(), BlockExec(), Divider(), Image(), Kwargs(), LlmsCopy(), SC(), TOC()]
 parse = create_parser(directives)
 
@@ -200,6 +209,11 @@ for file in files:
 
     # Store raw markdown content in NAME_CONTENT_MAP for the LLM copy button.
     NAME_CONTENT_MAP[metadata.name] = content
+
+    # Pages with a `.. toc::` fill the aside; the shell collapses it for
+    # every other page (lib/aside.py, item 16 — full-width /changelog).
+    if ".. toc::" in content:
+        aside.register(metadata.endpoint)
 
     layout = parse(content)
 
@@ -231,6 +245,7 @@ for file in files:
         ),
         category=metadata.category,
         icon=metadata.icon,
+        order=metadata.order,
         # Dash emits og:image/twitter:image for EVERY page and writes
         # content="" when it finds no image (dash/_pages.py) — and an empty
         # og:image unfurls as a blank card. Every register_page passes the CDN

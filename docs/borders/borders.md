@@ -2,6 +2,8 @@
 name: Borders & Sidebars
 description: Collapsible left, right, and bottom edge panels.
 endpoint: /borders
+category: Borders & Sidebars
+order: 1
 icon: mdi:dock-left
 lastmod: 2026-08-01
 ---

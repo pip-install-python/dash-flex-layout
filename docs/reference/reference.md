@@ -2,6 +2,8 @@
 name: Component Reference
 description: Every prop on DashFlexLayout and Tab, plus the model schema.
 endpoint: /reference
+category: Reference
+order: 1
 icon: mdi:book-open-variant
 lastmod: 2026-08-01
 ---

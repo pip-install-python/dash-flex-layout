@@ -2,6 +2,8 @@
 name: Basic Layouts
 description: Rows, columns, nested splits, and multi-tab tabsets.
 endpoint: /basic
+category: Basic Layouts
+order: 1
 icon: mdi:view-split-vertical
 lastmod: 2026-08-01
 ---
