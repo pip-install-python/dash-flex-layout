@@ -47,6 +47,23 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 os.chdir(PROJECT_ROOT)
 
+# Werkzeug's test client sends NO User-Agent by default, and at dimll >=2.8 an
+# absent UA is crawler-lane (item 12's contract: no browser engine token, no
+# browser lane). A mark_hidden() path (the admin pages) then 404s from the
+# PACKAGE's own middleware before this app's own gate ever runs — a real
+# fact about the crawler lane, not a route failure. Every route check below
+# must use a browser-shaped UA so it exercises what an anonymous person
+# actually sees; the internal token keeps this traffic off the analytics
+# ledger (lib.constants.INTERNAL_UA_TOKEN).
+try:
+    from lib.constants import INTERNAL_UA as _INTERNAL_UA
+except Exception:  # pragma: no cover — running outside a repo checkout
+    _INTERNAL_UA = "2plot-internal/1.0 (+https://2plot.ai/docs/satellite-analytics)"
+BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 " + _INTERNAL_UA
+)
+
 # Never let a smoke run beacon traffic at the live 2plot.ai hub, and keep the
 # ad client from adding a network timeout to every page view.
 # Popping the secret is what keeps lib/satellite_reporter.py dormant, so no
@@ -224,9 +241,10 @@ def _http_checks(res: Results, run_mod, dash_mod) -> None:
         return
     res.add("http", "test client available", True, type(server).__name__)
 
-    def get(url: str, group: str, expect=(200,), label: str | None = None):
+    def get(url: str, group: str, expect=(200,), label: str | None = None,
+            user_agent: str = BROWSER_UA):
         try:
-            resp = client.get(url)
+            resp = client.get(url, headers={"User-Agent": user_agent} if user_agent else {})
             ok = resp.status_code in expect
             res.add(group, label or url, ok, f"HTTP {resp.status_code}")
             return resp
@@ -259,9 +277,24 @@ def _http_checks(res: Results, run_mod, dash_mod) -> None:
         "endpoints", label="component bundle served")
 
     # Every page path. A Dash SPA returns the same index HTML for all of them,
-    # so a non-200 means routing or the index template broke.
+    # so a non-200 means routing or the index template broke. Browser-lane UA:
+    # a real person on /admin/traffic or /admin/control-board sees a 200 with
+    # the fail-closed hidden card (lib/gate_layouts.py), never a 404 — the
+    # 404 belongs to crawlers only, checked separately below.
     for entry in dash_mod.page_registry.values():
         get(entry["path"], "routes")
+
+    # The crawler-404 positive control (paired with the browser-lane 200s
+    # above): an admin path is mark_hidden(), so the PACKAGE's own bot
+    # middleware 404s a crawler-lane request before this app's gate ever
+    # runs. Checked with no User-Agent at all — the absent-UA-is-crawler
+    # contract (item 12) — so this is also proof the ledger's crawler
+    # classification and the SEO 404 agree on the same lane.
+    admin_paths = [e["path"] for e in dash_mod.page_registry.values()
+                  if e["path"].startswith("/admin/")]
+    for path in admin_paths:
+        get(path, "crawler-404", expect=(404,), user_agent="",
+            label=f"{path} (crawler lane)")
 
 
 def _check_callbacks(res: Results, run_mod) -> None:

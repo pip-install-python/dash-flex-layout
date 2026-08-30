@@ -24,8 +24,19 @@ package-lock.json
 .prettierrc
 .pylintrc
 
-# The 1 MB react-docgen artifact. Only `dash-generate-components` reads it.
-flexlayout_dash/metadata.json
+# flexlayout_dash/metadata.json (the 1 MB react-docgen artifact) is NOT
+# excluded here, unlike MANIFEST.in's exclusion of it from the PyPI wheel.
+# The two artifacts have different consumers: pip install flexlayout-dash
+# never runs pages/api.py (the docs site is not part of the wheel — see
+# DIVERGENCES.md §1), but THIS image serves the docs site directly, and
+# item 16's /api page reads flexlayout_dash/metadata.json at RUNTIME via
+# lib/api_reference.py — before this fix it was excluded here on the old
+# "only dash-generate-components reads it, at build time only" assumption,
+# which /api made false: the file is committed (git-tracked, not
+# gitignored) but was silently dropped from the build CONTEXT, so the
+# deployed image served /api with zero components and no error anywhere
+# (lib.api_reference.load_package returns [] on a missing metadata.json,
+# by design, so nothing crashes — it just lies).
 
 # README images — served nowhere, they only pad the image.
 github_assets/
