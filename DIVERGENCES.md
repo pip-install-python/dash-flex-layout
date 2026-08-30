@@ -364,6 +364,29 @@ Flask-only shape requires it, noted below. The fork's own choices live in
   previous vanity Discord invite and personal YouTube channel — the
   owner's 2026-08-30 decision, not a per-fork choice.
 
+### 18. `robots.txt` carries one `Disallow` line under `User-agent: *` — deliberate, not drift
+
+Verified live 2026-08-30 (post item-15 flip): `flexlayout.2plot.dev/robots.txt`
+reads `User-agent: *` / `Allow: /` / `Disallow: /admin/`, with no other
+`Disallow` anywhere. This fork is the only flipped fork carrying any
+`Disallow` line, which is a fact about THIS fork's admin surface, not
+fleet drift — it does not conflict with item 15's "no blanket Disallow"
+pins (`tests/test_llms_routes.py::test_robots_artifact_fingerprint`,
+`scripts/smoke_live.py`, `scripts/network_smoke.py`), which check for a
+blanket `Disallow: /` line specifically and treat `Disallow: /admin/`
+as expected.
+
+Set explicitly in `run.py`'s `RobotsConfig(..., disallowed_paths=["/admin/"])`
+call (`run.py:297`), not a `dash-improve-my-llms` default — the package
+ships no default `disallowed_paths`. The comment immediately above that
+line (`run.py:287-296`) explains why: `mark_hidden("/admin/control-board")`
+already keeps the control board out of the sitemap, the MCP resource set
+and the prerender, and 404s a crawler-lane request — but measured against
+dimll 2.6.1, `mark_hidden` alone does NOT write a robots rule, so this is
+the missing half, added deliberately. Gated documentation pages (a
+different axis — who may READ a page) stay listed in robots and the
+sitemap by network policy; only the ADMIN surface is disallowed here.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
