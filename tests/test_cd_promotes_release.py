@@ -123,9 +123,14 @@ def test_render_watches_release():
     assert all("autoDeploy" not in s or s["autoDeploy"] is True for s in web)
 
 
-def test_the_posture_fence_declares_the_road():
+def test_the_road_is_recorded_in_divergences():
+    """`deploy: release-branch` belongs in the posture fence once this
+    fork's kit copy of tests/test_claude_kit.py recognizes the key
+    (_POSTURE_KEYS is {ai_bots, healthz, runtime} as of PR #8's
+    1.6.22-1.6.33 fan-out) — until then the fact lives in prose, which
+    this pins instead of a fence key the kit test would reject."""
     text = (REPO / "DIVERGENCES.md").read_text()
-    match = re.search(r"^```yaml posture[ \t]*\n(.*?)^```", text, re.M | re.S)
-    assert match, "DIVERGENCES.md must carry a ```yaml posture fence"
-    fence = match.group(1)
-    assert re.search(r"^deploy:\s*release-branch\s*$", fence, re.M), fence
+    assert "release-branch" in text or "deploys `release`" in text, (
+        "DIVERGENCES.md must record that Render deploys `release`, "
+        "not `main`"
+    )

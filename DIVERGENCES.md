@@ -375,15 +375,19 @@ ONE entry is added, and it is the first real one:
 ## What this host serves
 
 Declares posture facts a sync session should check against, not
-restate from memory (sync/README.md's second fence). `ai_bots` and
-`healthz` need a live probe with a real vendor UA to state honestly —
-not yet measured for this host in this format, so they are omitted
-rather than guessed; a future `/wire-verify` pass should add them and
-paste the probe in its report. `deploy` is added now (§16): Render
-watches `release`, and only `cd.yml`'s promote step writes it — see
-§16 and the `.claude/CLAUDE.md` trap for the `build == HEAD` reading
-this implies.
+restate from memory (sync/README.md's second fence). Empty for now —
+`tests/test_claude_kit.py`'s kit copy (landed by PR #8's 1.6.22-1.6.33
+fan-out) validates `_POSTURE_KEYS = {ai_bots, healthz, runtime}` only,
+so a `deploy` key here would either fail that pin or, per its own
+comment, "be read by nobody" even if the pin were loosened — the hub
+side does not know the key yet either. Item 13's `deploy:
+release-branch` fact is recorded in prose instead, in §16 above and in
+the `.claude/CLAUDE.md` trap for the `build == HEAD` reading it
+implies; add it to this fence once the kit's `_POSTURE_KEYS` catches
+up (a future fan-out, or a session's own kit-test port). `ai_bots` and
+`healthz` also need a live probe with a real vendor UA to state
+honestly — a future `/wire-verify` pass should add all of it and
+paste the probe in its report.
 
 ```yaml posture
-deploy: release-branch
 ```
