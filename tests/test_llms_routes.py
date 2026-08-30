@@ -109,17 +109,34 @@ def test_robots_artifact_fingerprint(client):
     - 2.3.3: `ClaudeBot -> Disallow` (the actual *training* crawler, moved to
       the training bucket) while `Claude-User` and `Claude-SearchBot` — the
       user-triggered and search fetchers — are allowed.
+
+    Item 15 (2026-08-29, DEFAULT ALLOW) flips `block_ai_training` off: the
+    training bucket no longer gets its OWN `User-agent: ClaudeBot` stanza at
+    all — it falls under the wildcard `User-agent: *` / `Allow: /` rule
+    with everything else. A fingerprint that still looks up a `ClaudeBot`
+    stanza raises (`.index()` on a line that no longer exists), so the
+    training-side assertion is "no Disallow anywhere", not "Allow: / under
+    its own heading".
     """
-    lines = client.get("/robots.txt").text.splitlines()
+    text = client.get("/robots.txt").text
+    lines = text.splitlines()
 
     def rule(agent):
         idx = lines.index(f"User-agent: {agent}")
         return lines[idx + 1]
 
     assert rule("OAI-SearchBot") == "Allow: /", "pre-2.3.2 artifact"
-    assert rule("ClaudeBot") == "Disallow: /", "pre-2.3.3 artifact"
     assert rule("Claude-User") == "Allow: /", "pre-2.3.3 artifact"
     assert rule("Claude-SearchBot") == "Allow: /", "pre-2.3.3 artifact"
+    assert "Disallow: /" not in lines, (
+        "a blanket 'Disallow: /' line survived the item 15 flip — DEFAULT "
+        "ALLOW means no vendor class carries a blanket block any more "
+        "('Disallow: /admin/' under User-agent: * is unrelated and expected)"
+    )
+    assert "User-agent: ClaudeBot" not in text, (
+        "ClaudeBot still has its own stanza — DEFAULT ALLOW folds it back "
+        "under User-agent: *"
+    )
 
 
 def test_sitemap_lists_every_page_on_this_host(client, page_paths):

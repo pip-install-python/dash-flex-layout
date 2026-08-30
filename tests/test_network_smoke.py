@@ -97,6 +97,23 @@ def test_the_expected_h1_tracks_the_brand_constant(battery):
     assert battery.SITE_H1 == f"# {SITE_BRAND}"
 
 
+def test_the_default_ua_is_on_the_browser_lane(battery):
+    """Item 17 (2026-08-30): a User-Agent with no browser engine token is
+    crawler-lane at dimll >=2.8 — the bare internal token used to BE the
+    default UA, so every default-UA check in this battery quietly read the
+    prerendered crawler document instead of the browser one. UA must carry
+    a real Chrome/AppleWebKit token; CRAWLER_UA stays the other lane."""
+    from dash_improve_my_llms import classify
+
+    assert classify(battery.UA)["lane"] == "browser", (
+        f"battery.UA classifies as {classify(battery.UA)['lane']!r} — a "
+        "browser engine token (Chrome/AppleWebKit/...) must come BEFORE "
+        "the internal token"
+    )
+    assert classify(battery.CRAWLER_UA)["lane"] == "crawler"
+    assert INTERNAL_UA_TOKEN in battery.UA, "the internal token must survive the fix"
+
+
 def test_the_battery_reports_a_failure_rather_than_swallowing_it(wired):
     """The check that keeps every other assertion here honest.
 

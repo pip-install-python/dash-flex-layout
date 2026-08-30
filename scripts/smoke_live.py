@@ -323,7 +323,11 @@ def main(base: str) -> int:
     # these robots.txt pairs are how a live host is proven to run the intended
     # dash-improve-my-llms: 2.3.2 allowed OAI-SearchBot; 2.3.3 moved ClaudeBot
     # (the training crawler) to Disallow while allowing the user-triggered and
-    # search fetchers Claude-User / Claude-SearchBot.
+    # search fetchers Claude-User / Claude-SearchBot. Item 15 (2026-08-29,
+    # DEFAULT ALLOW) flips block_ai_training off: ClaudeBot no longer gets
+    # its own stanza at all — it falls under `User-agent: *` with everything
+    # else, so the fingerprint is "no Disallow anywhere", not a per-agent
+    # Disallow line.
     robots_lines = robots.splitlines()
 
     def robots_rule(agent: str) -> str:
@@ -336,7 +340,6 @@ def main(base: str) -> int:
 
     for agent, expected, since in (
         ("OAI-SearchBot", "Allow: /", "2.3.2"),
-        ("ClaudeBot", "Disallow: /", "2.3.3"),
         ("Claude-User", "Allow: /", "2.3.3"),
         ("Claude-SearchBot", "Allow: /", "2.3.3"),
     ):
@@ -346,6 +349,17 @@ def main(base: str) -> int:
             got == expected,
             f"got {got}: this host runs a pre-{since} artifact",
         )
+    check(
+        "/robots.txt carries no blanket Disallow (item 15 DEFAULT ALLOW artifact)",
+        "Disallow: /" not in robots_lines,
+        "a blanket 'Disallow: /' line survived — this host still blocks a "
+        "vendor class ('Disallow: /admin/' is unrelated and expected)",
+    )
+    check(
+        "ClaudeBot has no dedicated stanza (item 15 DEFAULT ALLOW artifact)",
+        "User-agent: ClaudeBot" not in robots,
+        "ClaudeBot still has its own User-agent block — pre-item-15 artifact",
+    )
 
     status, sitemap, _ = fetch(f"{base}/sitemap.xml")
     check("/sitemap.xml responds 200", status == 200, f"got {status}")

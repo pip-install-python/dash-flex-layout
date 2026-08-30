@@ -384,10 +384,20 @@ side does not know the key yet either. Item 13's `deploy:
 release-branch` fact is recorded in prose instead, in §16 above and in
 the `.claude/CLAUDE.md` trap for the `build == HEAD` reading it
 implies; add it to this fence once the kit's `_POSTURE_KEYS` catches
-up (a future fan-out, or a session's own kit-test port). `ai_bots` and
-`healthz` also need a live probe with a real vendor UA to state
-honestly — a future `/wire-verify` pass should add all of it and
-paste the probe in its report.
+up (a future fan-out, or a session's own kit-test port).
+
+`ai_bots` and `healthz` are WIRE facts (a real vendor UA against the
+live host), and this key is for what the host actually SERVES, not
+what its code intends — so it stays empty until measured there, never
+filled from in-process behavior. Item 15's posture flip
+(`block_ai_training=False` in `run.py`, not a recorded divergence —
+this fork is adopting the template's own new default, not diverging
+from it) is verified in-process only as of this touch: `GET /`,
+`/llms.txt`, `/healthz` with GPTBot and ClaudeBot UAs all answered 200
+against the local app (2026-08-30, pre-deploy — this host's production
+still runs the OLD `block_ai_training=True` build until this work
+pushes and deploys). A `/wire-verify` pass after that deploy should
+paste the six live lines here and populate this fence for real.
 
 ```yaml posture
 ```

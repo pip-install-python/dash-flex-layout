@@ -265,20 +265,22 @@ _auth.configure_app(app)
 app._base_url = BASE_URL
 require_owned_base_url()
 
-# Block training crawlers; allow AI-search citations and traditional search.
+# Allow training crawlers too, since item 15 (2026-08-29, owner decision,
+# Round 3.4): DEFAULT ALLOW. The wall used to decide by vendor CLASS what
+# nobody could account for; since item 12 every corpus read is a ledger row
+# and the hub reconciles it against the wire, so a read is now recorded and
+# priceable and the tool is per-vendor policy — `vendor_policy={"<key>":
+# "block" | "meter"}` for ONE vendor whose rows justify it, never the whole
+# class. Measured on the canary: the app-level 403 was the ONLY wall (no
+# Cloudflare AI-bot rule exists on this plan — Enterprise-only feature), so
+# flipping this flag alone is the full fix; there is no edge wall to also
+# check on this host's tier unless a future probe finds otherwise.
 #
-# The flag was False while this comment already claimed otherwise — an
-# inherited mismatch, fixed 2026-07-31. It is now True, which is the network
-# default and only became safe in 2.3.3: earlier releases had the Anthropic
-# taxonomy wrong and blocking training also blocked the legacy aliases that
-# claude.ai uses to fetch a page a user pasted. 2.3.3 separates them, so
-# GPTBot/ClaudeBot/CCBot are disallowed while Claude-User, Claude-SearchBot,
-# ChatGPT-User and OAI-SearchBot stay allowed.
-#
-# Net effect: this site can still be cited and fetched on demand by assistants,
-# but is not bulk-scraped into a training set.
+# Net effect: GPTBot/ClaudeBot/CCBot now get the same `Allow: /` as
+# Claude-User/Claude-SearchBot/ChatGPT-User/OAI-SearchBot/traditional search
+# — robots.txt carries no training-specific Disallow stanza at all.
 app._robots_config = RobotsConfig(
-    block_ai_training=True,
+    block_ai_training=False,
     allow_ai_search=True,
     allow_traditional=True,
     crawl_delay=10,

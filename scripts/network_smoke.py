@@ -53,7 +53,20 @@ try:
     from lib.constants import INTERNAL_UA as _INTERNAL_UA
 except Exception:  # running outside a repo checkout — keep the token intact
     _INTERNAL_UA = "2plot-internal/1.0 (+https://2plot.ai/docs/satellite-analytics)"
-UA = _INTERNAL_UA + " network-smoke"
+# Item 17 (2026-08-30): the bare internal token, with no browser engine
+# token, landed on the CRAWLER lane at dimll >=2.8 (a User-Agent with no
+# `Mozilla/...AppleWebKit/...` engine token is crawler-lane by default —
+# item 12's contract) — every default-UA check in this battery was quietly
+# reading the prerendered crawler document instead of the browser one. Same
+# fix scripts/smoke_live.py's BROWSER_UA already had: a real Chrome token
+# FIRST, the internal token AFTER it (INTERNAL_UA_TOKEN is a substring
+# match, so appending it costs nothing — the tracker still drops the hit).
+BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 "
+    + _INTERNAL_UA + " network-smoke"
+)
+UA = BROWSER_UA
 CRAWLER_UA = "Mozilla/5.0 (compatible; Googlebot/2.1) " + _INTERNAL_UA
 
 # The body dash-improve-my-llms serves when a page has no prose registered.
@@ -297,6 +310,10 @@ def satellite_checks(base: str) -> None:
         # split is how a live host is proven to run the intended package:
         # 2.3.2 allowed OAI-SearchBot; 2.3.3 moved ClaudeBot (the training
         # crawler) to Disallow while allowing Claude-User / Claude-SearchBot.
+        # Item 15 (2026-08-29, DEFAULT ALLOW) flips block_ai_training off:
+        # ClaudeBot no longer gets its own stanza — it falls under
+        # `User-agent: *` with everything else, so the fingerprint is "no
+        # Disallow anywhere", not a per-agent Disallow line.
         status, _, text = get("/robots.txt")
         expect(status == 200, f"/robots.txt {status}")
         lines = [ln.strip() for ln in text.splitlines()]
@@ -308,13 +325,17 @@ def satellite_checks(base: str) -> None:
 
         for agent, expected, since in (
             ("OAI-SearchBot", "Allow: /", "2.3.2"),
-            ("ClaudeBot", "Disallow: /", "2.3.3"),
             ("Claude-User", "Allow: /", "2.3.3"),
             ("Claude-SearchBot", "Allow: /", "2.3.3"),
         ):
             got = rule(agent)
             expect(got == expected,
                    f"{agent} -> {got!r}, expected {expected!r}: pre-{since} artifact")
+        expect("Disallow: /" not in lines,
+               "a blanket 'Disallow: /' line survived the item 15 flip — a "
+               "vendor class is still blocked ('Disallow: /admin/' is unrelated)")
+        expect("User-agent: ClaudeBot" not in text,
+               "ClaudeBot still has its own stanza — pre-item-15 artifact")
         expect(any(ln.startswith("Sitemap:") for ln in lines), "Sitemap line missing")
 
     def sitemap_absolute_and_on_this_host():
