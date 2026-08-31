@@ -108,6 +108,26 @@ def _declared_lastmods() -> set[str]:
         m = re.search(r"^lastmod:\s*(\d{4}-\d{2}-\d{2})\s*$", head, re.MULTILINE)
         if m:
             dates.add(m.group(1))
+    # /api's lastmod (item 18) is NOT frontmatter — it is the `generated`
+    # stamp scripts/build_api_metadata.py writes to
+    # flexlayout_dash/api_metadata.json, moved only when the extract that
+    # actually regenerates /api's content runs. Same truth-or-silence rule,
+    # different declaration site.
+    from lib import api_reference
+    from lib.constants import API_PACKAGES
+
+    for pkg in API_PACKAGES:
+        stamp = api_reference.slim_generated_on(pkg)
+        if stamp:
+            dates.add(stamp)
+    # /changelog's lastmod (item 18) is the newest DATED release heading in
+    # CHANGELOG.md — a third declaration site, moving only when a release
+    # is actually dated by hand.
+    from pages.changelog import newest_date
+
+    changelog_date = newest_date()
+    if changelog_date:
+        dates.add(changelog_date)
     return dates
 
 

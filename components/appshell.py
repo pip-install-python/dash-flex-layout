@@ -1,5 +1,5 @@
 import dash_mantine_components as dmc
-from dash import Output, Input, callback, clientside_callback, dcc, page_container, State
+from dash import Output, Input, callback, clientside_callback, dcc, html, page_container, State
 
 from components.footer import FOOTER_HEIGHT, create_footer
 from components.header import create_header
@@ -170,6 +170,10 @@ def create_appshell(data):
             },
         },
         children=[
+            # a11y (item 18, adopted from muischeduler): the first tab stop
+            # jumps past the sidebar's stops straight to the page content;
+            # visible only on keyboard focus — .skip-link in assets/main.css.
+            html.A("Skip to content", href="#main-content", className="skip-link"),
             dcc.Location(id="url", refresh="callback-nav"),
             dcc.Store(id="color-scheme-storage", storage_type="local"),
             # Persists the desktop-navbar collapse state across reloads.
@@ -186,6 +190,7 @@ def create_appshell(data):
                     create_navbar_drawer(data),
                     dmc.AppShellMain(
                         children=page_container,
+                        id="main-content",   # the skip link's target
                         # Full height minus the header and footer. One
                         # constant per band so the main pane, the header,
                         # the footer and the mobile drawer can never

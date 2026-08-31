@@ -88,16 +88,19 @@ SITE_H1 = "# flexlayout-dash — resizable panel layouts for Dash"
 DEFAULT_BASE_URL = "http://localhost:8055"
 
 # Owner-only surfaces that must 404 their llms.txt to an anonymous reader.
-# The first entry is a real page on this host as of the gate-wave pass:
-# pages/control_board.py calls mark_hidden("/admin/control-board"), which
-# keeps it out of /sitemap.xml, out of the MCP resource set, out of the
-# prerender, and 404s crawler requests — this is the outside proof that the
-# call is still there. The other two are canaries for paths a future owner
-# surface would take. Add a path here in the SAME change that marks it hidden.
+# Both entries are real pages on this host: pages/control_board.py and
+# pages/traffic.py each call mark_hidden("/admin/..."), which keeps the page
+# out of /sitemap.xml, out of the MCP resource set, out of the prerender,
+# and 404s crawler requests — this is the outside proof the call is still
+# there. Pinned against dash.page_registry by
+# tests/test_nav_contract.py::test_battery_hidden_paths_match_the_registry
+# (item 18, note 74) so a page added, renamed or deleted moves this tuple in
+# the SAME change — this list drifted once already (the pre-item-16 canary
+# entries below named paths that were never real pages, while the actual
+# /admin/traffic page this fork added went unlisted).
 HIDDEN_DOC_PATHS = (
     "/admin/control-board/llms.txt",
-    "/admin/llms.txt",
-    "/analytics/llms.txt",
+    "/admin/traffic/llms.txt",
 )
 
 # The hub one level up the chain. A satellite's llms.txt must name it — that

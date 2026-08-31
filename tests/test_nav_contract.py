@@ -341,3 +341,80 @@ def test_other_apps_dropdown_is_solid_and_every_primary_app_has_an_icon(app_modu
     assert dropdown.styles["dropdown"]["backgroundColor"]
     for url in PRIMARY:
         assert ICONS.get(url) not in (None, "mdi:web"), f"{url} has no icon"
+
+
+# ------------------------------------------------------------- item 18 --
+
+
+def test_battery_hidden_paths_match_the_registry(app_module):
+    """The battery's literal tuple is pinned against the registry, so a page
+    added, renamed or deleted moves it in the same change — this drifted
+    once already (scripts/network_smoke.py's HIDDEN_DOC_PATHS still named
+    two canary paths that were never real pages while the real
+    /admin/traffic page this fork added went unlisted)."""
+    import dash
+
+    from scripts.network_smoke import HIDDEN_DOC_PATHS
+
+    admin = {p["path"] for p in dash.page_registry.values() if p["path"].startswith("/admin/")}
+    assert set(HIDDEN_DOC_PATHS) == {f"{p}/llms.txt" for p in admin}, (
+        "network_smoke.HIDDEN_DOC_PATHS drifted from the registered admin pages"
+    )
+
+
+def test_api_reference_falls_back_to_the_committed_extract_then_docstrings(tmp_path, monkeypatch):
+    """metadata.json -> api_metadata.json (committed, stamped) ->
+    docstrings (hook-based packages ship no metadata at all). This fork's
+    own /api only ever exercises the first road (flexlayout_dash ships a
+    real metadata.json); this proves the other two, ported wholesale into
+    lib/api_reference.py, actually work rather than being dead code."""
+    import json
+    import sys
+
+    from lib import api_reference
+
+    # docstring-only package (modelviewer's shape)
+    comps = api_reference.load_package("tests.fixtures.docstring_dash_pkg")
+    assert [c["name"] for c in comps] == ["DocWidget"]
+    props = {p["name"]: p for p in comps[0]["props"]}
+    assert props["value"]["required"] and props["size"]["default"] == "'md'"
+    assert props["id"]["description"].startswith("The ID")
+    assert "setProps" not in props
+    # slim extract wins over docstrings and carries the generated stamp
+    pkg_dir = tmp_path / "slim_pkg"
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text("class Only:\n    pass\n")
+    (pkg_dir / api_reference.SLIM_METADATA).write_text(json.dumps({"generated": "2026-08-30", "components": [
+        {"name": "Only", "description": "d", "props": [{"name": "id", "type": "string", "required": False, "default": "", "description": "x"}]}]}))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    sys.modules.pop("slim_pkg", None)
+    assert api_reference.load_package("slim_pkg")[0]["name"] == "Only"
+    assert api_reference.slim_generated_on("slim_pkg") == "2026-08-30"
+    assert api_reference.slim_generated_on("tests.fixtures.docstring_dash_pkg") is None
+
+
+def test_api_markdown_escapes_pipes_in_every_cell():
+    from lib import api_reference
+
+    rows = [{"package": "x", "components": [{"name": "C", "description": "", "props": [
+        {"name": "a|b", "type": "a | b", "required": False, "default": "x|y", "description": "d|e\nf"}]}]}]
+    import unittest.mock as um
+    with um.patch.object(api_reference, "load_packages", return_value=rows):
+        md = api_reference.as_markdown(["x"])
+    assert "a\\|b" in md and "x\\|y" in md and "d\\|e f" in md
+
+
+def test_every_test_client_user_names_headers():
+    """A bare test client sends `Werkzeug/x.y` — crawler lane at dimll >= 2.8
+    — so a mark_hidden page 404s and an every-page-200 loop goes red at the
+    floor bump (exactly the scripts/smoke_test.py defect item 18's checks
+    2/3 pass found and fixed on this fork). Any file that drives
+    `.test_client()` must pass headers (a named UA)."""
+    offenders = []
+    for folder in ("tests", "scripts"):
+        for path in sorted((REPO / folder).glob("*.py")):
+            src = path.read_text()
+            names_ua = "headers=" in src or "HTTP_USER_AGENT" in src or "user_agent=" in src
+            if ".test_client()" in src and not names_ua:
+                offenders.append(f"{folder}/{path.name}")
+    assert offenders == [], offenders

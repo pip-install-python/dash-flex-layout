@@ -64,6 +64,47 @@ def convert_dash_docstring_to_dict(docstring):
     return params
 
 
+# Common package name mappings — shared by the browser directive below and
+# pages/markdown.py's machine-lane expansion (item 18's "ONE shared parse
+# for both consumers"), so a spec resolves to the same component either way.
+PACKAGE_MAP = {
+    "dmc": "dash_mantine_components",
+    "html": "dash.html",
+    "dcc": "dash.dcc",
+    "dash": "dash",
+}
+
+
+def resolve_kwargs(component_spec: str, library: str | None = None) -> list[dict]:
+    """``[{name, type, description}, ...]`` for a ``"pkg.Component"`` (or bare
+    ``"Component"`` with ``library=``) spec — the ONE parse both the browser's
+    ``.. kwargs::`` directive and the machine lane's expansion call, so a page
+    can never show one table to a person and a different (or empty) one to
+    an agent. Never raises: an unresolvable spec returns ``[]``, same as the
+    directive's own failure mode."""
+    if "." in component_spec:
+        package_abbr, component_name = component_spec.rsplit(".", 1)
+        package = PACKAGE_MAP.get(package_abbr, package_abbr)
+    else:
+        package = library or "dash_mantine_components"
+        component_name = component_spec
+
+    try:
+        imported = importlib.import_module(package)
+        component = getattr(imported, component_name)
+        docstring = inspect.getdoc(component) or ""
+
+        if "----------" in docstring:
+            section_text = docstring.split("----------\n")[-1]
+            return convert_docstring_to_dict(section_text)
+        if "Keyword arguments:" in docstring:
+            # Dash-generated components (incl. flexlayout_dash, DMC).
+            return convert_dash_docstring_to_dict(docstring)
+        return []
+    except (ModuleNotFoundError, AttributeError, Exception):
+        return []
+
+
 class Kwargs(KwargsBase):
 
     def hook(self, md, state):
@@ -79,34 +120,5 @@ class Kwargs(KwargsBase):
             # Parse the component specification (e.g., "dmc.Button" or
             # "flexlayout_dash.DashFlexLayout").
             component_spec = attrs["title"]
-
-            # Common package name mappings
-            package_map = {
-                "dmc": "dash_mantine_components",
-                "html": "dash.html",
-                "dcc": "dash.dcc",
-                "dash": "dash",
-            }
-
-            if "." in component_spec:
-                package_abbr, component_name = component_spec.rsplit(".", 1)
-                package = package_map.get(package_abbr, package_abbr)
-            else:
-                package = attrs.pop("library", "dash_mantine_components")
-                component_name = component_spec
-
-            try:
-                imported = importlib.import_module(package)
-                component = getattr(imported, component_name)
-                docstring = inspect.getdoc(component) or ""
-
-                if "----------" in docstring:
-                    section_text = docstring.split("----------\n")[-1]
-                    attrs["kwargs"] = convert_docstring_to_dict(section_text)
-                elif "Keyword arguments:" in docstring:
-                    # Dash-generated components (incl. flexlayout_dash, DMC).
-                    attrs["kwargs"] = convert_dash_docstring_to_dict(docstring)
-                else:
-                    attrs["kwargs"] = []
-            except (ModuleNotFoundError, AttributeError, Exception):
-                attrs["kwargs"] = []
+            library = attrs.pop("library", None)
+            attrs["kwargs"] = resolve_kwargs(component_spec, library)

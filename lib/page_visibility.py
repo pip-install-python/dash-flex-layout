@@ -259,3 +259,24 @@ def set_llms_public(path: str, value: bool) -> None:
     with _lock:
         _overrides.setdefault(path, {})["llms_public"] = bool(value)
         _persist()
+
+
+def published_name(path: str, name: str) -> str:
+    """The name this path publishes to agents — the site brand at the root.
+
+    A home page registered as "Home" is a nav label to humans and an
+    IDENTITY to dash-improve-my-llms: the registered name feeds the
+    /llms.txt H1 and the injected prerender header. When the preamble
+    `# {name}` and the injected header disagree, the H1 dedup cannot fire
+    and the machine lane serves a duplicate-H1 page.
+
+    On THIS fork the home page's own markdown body already opens with its
+    own `# {SITE_BRAND}` H1 (DIVERGENCES.md §5), so
+    `pages/markdown.py::_build_llms_doc`'s fence-aware guard skips the
+    preamble entirely for `/` and this function's result is never even
+    used there — it exists for parity with the network's shape and as a
+    safety net if that guard is ever removed.
+    """
+    from lib.constants import SITE_BRAND
+
+    return SITE_BRAND if path == "/" else name

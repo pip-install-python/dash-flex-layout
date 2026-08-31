@@ -33,6 +33,10 @@ include flexlayout_dash/*-shared.js.map
 # guards against a future broadening of that line.
 exclude flexlayout_dash/metadata.json
 exclude flexlayout_dash/proptypes.js
+# The committed extract lib/api_reference.py falls back to (item 18) — small
+# (~1% of metadata.json), but it exists only for the docs site's /api page,
+# and lib/ is pruned from the wheel below, so pip installers never read it.
+exclude flexlayout_dash/api_metadata.json
 
 # NOT shipped, and each for a specific reason.
 #

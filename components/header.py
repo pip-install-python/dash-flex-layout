@@ -27,13 +27,17 @@ def create_clerk_avatar():
     return create_clerk_menu(show_dropdown=True, dropdown_align="right")
 
 
-def create_link(icon, href, label):
+def create_link(icon, href, label, visible_from=None):
     """Create an external link icon button.
 
     ``label`` is REQUIRED: an icon-only link has no accessible name, so
     screen readers announce it as "link" and AI agents can't tell what it
     does — the exact Lighthouse/Agentic-Browsing failure measured on the
     fleet 2026-08-21. The label lands on both the anchor and the button.
+
+    ``visible_from`` (a Mantine breakpoint) lets a link drop at phone
+    widths where the header runs out of room (item 18) — via
+    visibleFrom, which removes it from the a11y tree, never opacity/width.
 
     NEVER pass ``title=`` to a DMC component instead: DMC 2.8's ActionIcon
     and Anchor accept ``aria-*`` wildcards but REJECT ``title``, raising
@@ -50,6 +54,7 @@ def create_link(icon, href, label):
         ),
         href=href,
         target="_blank",
+        visibleFrom=visible_from,
         **{"aria-label": label},
     )
 
@@ -263,11 +268,13 @@ def create_header(data):
                             "simple-icons:pypi",
                             "https://pypi.org/project/flexlayout-dash/",
                             "flexlayout-dash on PyPI",
+                            visible_from="xs",
                         ),
                         create_link(
                             "radix-icons:github-logo",
                             GITHUB_URL,
                             "View the source on GitHub",
+                            visible_from="xs",
                         ),
                         dmc.ActionIcon(
                             [

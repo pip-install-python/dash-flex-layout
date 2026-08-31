@@ -16,8 +16,9 @@ from lib.ad_client import inject_ad_into_aside
 from lib.renderer import create_parser
 from lib.constants import OG_IMAGE_URL, PAGE_TITLE_PREFIX, NAME_CONTENT_MAP
 from lib import aside, gate_layouts, page_tiers, page_visibility
+from lib.page_visibility import published_name
 from lib.directives.headings import patch_renderer
-from lib.directives.kwargs import Kwargs
+from lib.directives.kwargs import Kwargs, resolve_kwargs
 from lib.directives.llms_copy import LlmsCopy
 from lib.directives.source import SC
 from lib.directives.toc import TOC
@@ -41,6 +42,11 @@ class Meta(BaseModel):
     icon: Optional[str] = None
     # Sidebar position within its category (item 16); ties break on name.
     order: int = 1000
+    # Short sidebar label (item 18); default = name. A page whose SEO/llms.txt
+    # name is long can keep it (title, og:title, the llms.txt H1 all still
+    # read `name`) while the sidebar shows something shorter — shortening
+    # `name:` itself would churn all three for a cosmetic nav change.
+    nav: Optional[str] = None
     # Who may read this page: public | auth | admin | hidden. Absent means
     # the deployment default (PAGE_DEFAULT_TIER, else public) — see
     # lib/page_tiers.py for the tier model and why the default is open.
@@ -129,6 +135,62 @@ def _expand_source_directives(markdown_content: str) -> str:
         elif fence is not None and head == fence:
             fence = None
         elif fence is None and _SOURCE_DIRECTIVE.match(line):
+            out.append(expansion(line))
+            continue
+        out.append(line)
+    return '\n'.join(out)
+
+
+_KWARGS_DIRECTIVE = re.compile(r'^\.\. kwargs::(.+?)$', re.MULTILINE)
+
+
+def _cell(text) -> str:
+    """One Markdown table cell: no newlines, no unescaped pipes."""
+    return str(text).replace('\n', ' ').replace('|', '\\|')
+
+
+def _expand_kwargs_directives(markdown_content: str) -> str:
+    """Inline `.. kwargs::pkg.Component` as a Markdown prop table.
+
+    The 4th empty-machine-lane mechanism (item 18, muicharts 1b2ac12): a
+    markdown2dash DIRECTIVE that renders Dash components (lib/directives/
+    kwargs.py's Kwargs) puts its output ONLY in the React tree — the
+    machine lane, the prerender and the crawler HTML are all built from
+    the markdown SOURCE, where the directive line survives verbatim (or,
+    before this fix, was silently dropped) and the browser's rich prop
+    table simply never reached an agent. docs/reference/reference.md is
+    THIS fork's own instance: `/reference/llms.txt` served `### DashFlexLayout`
+    straight into `### Tab` with the entire prop table between them missing.
+
+    ONE SHARED PARSE (the item's own requirement): `resolve_kwargs()` in
+    lib/directives/kwargs.py is what BOTH the browser's Kwargs directive
+    and this expansion call — a spec can never resolve to one table in
+    the browser and a different (or empty) one here. FENCE-AWARE for the
+    same reason `_expand_source_directives` is: docs/directives teaches
+    `.. kwargs::` inside a ```markdown fence as a syntax example, which
+    must not be expanded.
+    """
+    def expansion(directive_line: str) -> str:
+        spec = _KWARGS_DIRECTIVE.match(directive_line).group(1).strip()
+        params = resolve_kwargs(spec)
+        if not params:
+            return f'\n<!-- kwargs: {spec} resolved to no props -->\n'
+        lines = ['', f'**{spec}** props:', '',
+                 '| prop | type | description |', '|---|---|---|']
+        for p in params:
+            lines.append(f"| `{_cell(p['name'])}` | {_cell(p['type'])} | {_cell(p['description'])} |")
+        lines.append('')
+        return '\n'.join(lines)
+
+    out: List[str] = []
+    fence = None
+    for line in markdown_content.split('\n'):
+        head = line.lstrip()[:3]
+        if fence is None and head in ('```', '~~~'):
+            fence = head
+        elif fence is not None and head == fence:
+            fence = None
+        elif fence is None and _KWARGS_DIRECTIVE.match(line):
             out.append(expansion(line))
             continue
         out.append(line)
@@ -229,6 +291,18 @@ for file in files:
     # fail-silent either way, so it can never block page registration.
     inject_ad_into_aside(layout, metadata.endpoint)
 
+    # Wrap the whole page in ONE container with a page-unique id (item 18).
+    # dash-renderer keys React children by component id, and markdown2dash
+    # gives every heading an id derived from its text ("usage",
+    # "introduction", ...) so TOC anchors work. Those ids repeat within and
+    # across pages, so when fast navigation swaps _pages_content.children
+    # between two flat layout lists, React reconciles by colliding keys and
+    # splices stale headings from the previous page into the new one
+    # (TOC-only ghost page until you scroll). A single keyed wrapper per
+    # page makes every swap old-node -> new-node: atomic unmount/mount, no
+    # cross-page key matching. Do not flatten this back into a list.
+    layout = dmc.Box(layout, id="m2d-page" + metadata.endpoint.replace("/", "-"))
+
     # register with dash — the layout goes in behind the interactive gate.
     # The tree is still built once, above; gated_layout only decides per
     # render whether the visitor gets it or the sign-in/forbidden/404 card
@@ -246,6 +320,7 @@ for file in files:
         category=metadata.category,
         icon=metadata.icon,
         order=metadata.order,
+        nav=metadata.nav,
         # Dash emits og:image/twitter:image for EVERY page and writes
         # content="" when it finds no image (dash/_pages.py) — and an empty
         # og:image unfurls as a blank card. Every register_page passes the CDN
@@ -271,7 +346,7 @@ for file in files:
     page_tiers.register(metadata.endpoint, metadata.tier,
                         llms_public=metadata.llms_public)
 
-    expanded = _expand_source_directives(content)
+    expanded = _expand_kwargs_directives(_expand_source_directives(content))
     # The full record, matching the dash.register_page call above. These two
     # calls must never describe the same page differently: the thinner record
     # here is exactly how the fleet shipped "flexlayout-dash | Theming" to
@@ -289,5 +364,16 @@ for file in files:
         # TypeError — measured on 2.5.1); the floor in run.py guarantees
         # >= 2.6.1, where a real date is emitted and None omits the tag.
         lastmod=metadata.lastmod,
-        llms_doc=_build_llms_doc(metadata.name, metadata.description, expanded, metadata.endpoint),
+        # The PUBLISHED name, not the nav label (item 18): a home page
+        # named "Home" would put `# Home` in the preamble while the
+        # package injects the site brand. On this fork _build_llms_doc's
+        # own fence-aware guard already skips the preamble for `/`
+        # (DIVERGENCES.md §5), so this only matters for a future page
+        # whose body has no H1 of its own.
+        llms_doc=_build_llms_doc(
+            published_name(metadata.endpoint, metadata.name),
+            metadata.description,
+            expanded,
+            metadata.endpoint,
+        ),
     )

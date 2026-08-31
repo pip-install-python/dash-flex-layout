@@ -14,6 +14,13 @@ from lib import agent_key
 
 NO_STORE = "private, no-store"
 
+# This route never classifies by User-Agent (register_agent_key_route
+# answers 204/200 the same way regardless), so the item 18 crawler-lane
+# bug cannot bite here — named anyway for consistency with the fleet's
+# "every .test_client() names a UA" pin (tests/test_nav_contract.py).
+BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
 
 class _App:
     def __init__(self, server):
@@ -28,7 +35,7 @@ def route_client():
 
 
 def test_anonymous_gets_204_with_no_store(route_client):
-    r = route_client.get("/api/agent-key")
+    r = route_client.get("/api/agent-key", headers={"User-Agent": BROWSER_UA})
     assert r.status_code == 204
     assert r.headers["Cache-Control"] == NO_STORE
 
@@ -37,7 +44,7 @@ def test_a_minted_key_returns_200_json_with_no_store(route_client, monkeypatch):
     monkeypatch.setattr(agent_key, "_mint_from_token",
                         lambda t: "k2p_minted" if t == "tok" else None)
     route_client.set_cookie("__session", "tok")
-    r = route_client.get("/api/agent-key")
+    r = route_client.get("/api/agent-key", headers={"User-Agent": BROWSER_UA})
     assert r.status_code == 200
     assert r.get_json() == {"key": "k2p_minted"}
     assert r.headers["Cache-Control"] == NO_STORE
@@ -47,7 +54,8 @@ def test_the_token_is_read_from_the_cookie_never_the_query(route_client, monkeyp
     seen = []
     monkeypatch.setattr(agent_key, "_mint_from_token",
                         lambda t: seen.append(t) or None)
-    route_client.get("/api/agent-key?token=forged&__session=forged2")
+    route_client.get("/api/agent-key?token=forged&__session=forged2",
+                     headers={"User-Agent": BROWSER_UA})
     assert seen == [""], "a query-string token reached the mint path"
 
 

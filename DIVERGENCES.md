@@ -387,6 +387,51 @@ the missing half, added deliberately. Gated documentation pages (a
 different axis — who may READ a page) stay listed in robots and the
 sitemap by network policy; only the ADMIN surface is disallowed here.
 
+### 19. Item 18 (the 1.6.41 remainder) — a real defect found from inside, a scope cut, a deferral
+
+Item 18 ported the nineteen 1.6.41 files the 16+17 round hadn't carried.
+Two things this session found that the item text didn't name, one scope
+cut, and one deferral — all worth a session reading this fork later
+knowing about:
+
+- **The 4th empty-machine-lane mechanism, found on THIS fork's own
+  content.** `docs/reference/reference.md`'s two `.. kwargs::` directives
+  (13 props on DashFlexLayout, 2 on Tab) rendered a full prop table in
+  the browser and were COMPLETELY ABSENT from `/reference/llms.txt` and
+  the crawler HTML — `### DashFlexLayout` ran straight into `### Tab`
+  with nothing between them. Not named in item 18's own text (which
+  described the mechanism generically via muicharts' /api case); this
+  fork's instance is on its documentation page, not /api. Fixed:
+  `lib/directives/kwargs.py` now exposes `resolve_kwargs()` — the ONE
+  parse both the browser's `Kwargs` directive and a new fence-aware
+  `pages/markdown.py::_expand_kwargs_directives` call — so a spec can
+  never resolve to one table in the browser and a different (or empty)
+  one in `/<page>/llms.txt`. Pinned by `tests/test_kwargs_machine_lane.py`
+  with a mutation check (disable `resolve_kwargs`, confirm the machine
+  lane actually goes empty) per the item's own test lesson.
+- **The VUNRELEASED badge, item 18's acceptance bar, not "leave it".**
+  An earlier drop said the badge bug was "note 67, template-side — leave
+  it" — true for the TEMPLATE's own /changelog, but this fork's
+  `CHANGELOG.md` opens with `## [Unreleased]`, which item 18's own
+  acceptance line ("/changelog badges read correctly on your changelog's
+  own shape") explicitly covers. Ported the `_is_version`/label fix;
+  verified `vUnreleased` no longer appears.
+- **Rollup v4's "v3-agnostic" restructuring (`ROLLUP_V4_MODULE`,
+  `tests/fixtures/rollup_pre_v3.py`) was NOT ported.** That work targets
+  forks with no v3 rollup at all (clerkhook). This fork's
+  `lib/traffic_rollup.py` has full v3 (items 12's own work), and
+  `tests/test_traffic_rollup_v4.py` from that round already tests it
+  correctly against this tree — not-applicable-because, not skipped.
+- **Deferred, not ported:** `scripts/smoke_live.py`'s auth-wiring POST
+  check and GitHub-repo-link-resolves check, and cd.yml's "fail fast on
+  supersession" `gh api compare` logic in the build-match wait. All
+  three are real, valuable additions from the 1.6.41 file set, but none
+  are named in item 18's own acceptance bar (the four pins + /api
+  lastmod + /changelog badges), and none could be verified against a
+  live run in this session. Left as `open` — a future session should
+  port and verify them against an actual CD run rather than trust an
+  unexercised diff.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
