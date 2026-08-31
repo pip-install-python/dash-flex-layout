@@ -131,6 +131,32 @@ def _declared_lastmods() -> set[str]:
     return dates
 
 
+def test_api_lastmod_is_the_changelog_date_not_the_day_the_builder_ran():
+    """The muicharts correction (item 18 amendment): a lastmod must be the
+    date the CONTENT moved, never the day scripts/build_api_metadata.py
+    happened to run. Derives the EXPECTED date independently — straight
+    from CHANGELOG.md's entry for the installed package's own
+    __version__ — so a version bump that forgets to regenerate the
+    extract goes red here instead of silently shipping a stale-but-still-
+    a-lie date."""
+    import flexlayout_dash
+
+    from lib import api_reference
+    from scripts.build_api_metadata import changelog_date_for_version
+
+    expected = changelog_date_for_version(flexlayout_dash.__version__)
+    assert expected, (
+        f"CHANGELOG.md has no dated entry for the installed version "
+        f"{flexlayout_dash.__version__} — date the release before this pin can run"
+    )
+    actual = api_reference.slim_generated_on("flexlayout_dash")
+    assert actual == expected, (
+        f"flexlayout_dash/api_metadata.json's generated stamp ({actual!r}) does "
+        f"not match CHANGELOG.md's dated entry for v{flexlayout_dash.__version__} "
+        f"({expected!r}) — re-run scripts/build_api_metadata.py"
+    )
+
+
 def test_sitemap_lastmod_is_verbatim_or_absent(client):
     sitemap = client.get("/sitemap.xml").text
     emitted = re.findall(r"<lastmod>([^<]+)</lastmod>", sitemap)

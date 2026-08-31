@@ -224,10 +224,15 @@ def test_healthz_is_live_not_a_snapshot(monkeypatch):
     stub = SimpleNamespace(server=Flask("healthz_snapshot_pin"))
     register_health_route(stub, "flask")
     probe = stub.server.test_client()
-    assert probe.get("/healthz").get_json()["app"] == "before"
+    # This stub never wires dash-improve-my-llms' bot middleware (only
+    # /healthz is registered on a bare Flask app), so the item 18
+    # crawler-lane bug cannot bite here — a UA is named anyway for the
+    # fleet's "every .test_client() names one" pin.
+    ua = {"headers": {"User-Agent": "Mozilla/5.0 AppleWebKit/537.36 Chrome/120.0.0.0"}}
+    assert probe.get("/healthz", **ua).get_json()["app"] == "before"
 
     monkeypatch.setenv("SATELLITE_APP_KEY", "after")
-    assert probe.get("/healthz").get_json()["app"] == "after"
+    assert probe.get("/healthz", **ua).get_json()["app"] == "after"
 
     # Flask lane: the route hands its own request headers to geo's
     # `resolved`. The template pins the same contract on its Starlette lane,
@@ -235,7 +240,10 @@ def test_healthz_is_live_not_a_snapshot(monkeypatch):
     # reads the Flask request context can never see a Starlette request,
     # which is how pannellum's FastAPI healthz answered "no request context"
     # forever (template 1.6.12).
-    body = probe.get("/healthz", headers={"CF-IPCountry": "FR"}).get_json()
+    body = probe.get(
+        "/healthz",
+        headers={"CF-IPCountry": "FR", "User-Agent": ua["headers"]["User-Agent"]},
+    ).get_json()
     if body.get("geo"):
         assert "FR" in body["geo"]["resolved"], body["geo"]
 

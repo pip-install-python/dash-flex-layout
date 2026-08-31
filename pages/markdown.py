@@ -141,6 +141,121 @@ def _expand_source_directives(markdown_content: str) -> str:
     return '\n'.join(out)
 
 
+_EXEC_DIRECTIVE = re.compile(r'^\.\. exec::(.+?)$', re.MULTILINE)
+_CODE_FALSE = re.compile(r'^\s*:code:\s*false\s*$', re.IGNORECASE)
+
+
+def _exec_module_to_path(module_spec: str) -> Path:
+    """``docs.basic.example`` -> ``docs/basic/example.py`` — the same dotted
+    path the ``.. exec::`` directive's own live-component import uses."""
+    return Path(*module_spec.split('.')).with_suffix('.py')
+
+
+def _expand_exec_directives(markdown_content: str) -> str:
+    """Inline `.. exec::module.path` with the example's own source.
+
+    A markdown2dash directive that renders a live Dash component (BlockExec)
+    puts its output ONLY in the React tree — dash-improve-my-llms builds the
+    machine lane from this markdown SOURCE and silently drops any `.. `
+    directive line it does not itself recognise, so an un-expanded
+    `.. exec::` line vanishes with no trace: measured on every one of this
+    fork's six example pages, `/basic/llms.txt` went from "Drag tabs between
+    tabsets..." straight to "### Notes" with the entire live-demo source
+    between them gone. Same defect class as `.. kwargs::` above
+    (item 18, muicharts' /api instance; this fork's own instance was found
+    on /reference — see tests/test_kwargs_machine_lane.py), different
+    directive.
+
+    Three-step precedence, in order, per doc author (item 18 amendment):
+
+    1. **Dedupe, silently.** A page that ALSO has a `.. source::` directive
+       naming the SAME file is already showing that source deliberately —
+       expanding the exec block too would duplicate it. Leave the exec
+       line untouched; the package's own silent-drop handles it, which is
+       the correct outcome here (the content is already present, once).
+    2. **`:code: false` — a marker, not a copy.** An author who wants the
+       live demo WITHOUT dumping its source into the machine lane says so
+       explicitly, on an indented option line directly under the
+       directive. Respected as a marker naming the module, never silently
+       treated the same as case 1 (a reader should be able to tell "the
+       source is elsewhere" from "the author chose not to show it").
+    3. **Otherwise, expand** — the same fenced-code treatment
+       `_expand_source_directives` gives `.. source::`, sourced from the
+       dotted module path's own file. Measured on this fork: 0 of 6
+       `.. exec::` directives use either #1 or #2, so all six expand.
+
+    FENCE-AWARE for the same reason `_expand_source_directives` is: a
+    directive inside a ```markdown fence is a syntax example, not a live
+    one.
+    """
+    lines = markdown_content.split('\n')
+    sourced_paths = {
+        Path(m.group(1).strip()).resolve()
+        for m in _SOURCE_DIRECTIVE.finditer(markdown_content)
+    }
+
+    def expand_file(module_spec: str) -> str:
+        file_path = _exec_module_to_path(module_spec)
+        try:
+            content = file_path.read_text()
+            tail = '' if content.endswith('\n') else '\n'
+            return f'\n```python\n# File: {file_path}\n\n{content}{tail}```\n'
+        except FileNotFoundError:
+            return f'\n<!-- Error: File not found: {file_path} -->\n'
+        except Exception as exc:
+            return f'\n<!-- Error reading {file_path}: {exc} -->\n'
+
+    out: List[str] = []
+    fence = None
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        head = line.lstrip()[:3]
+        if fence is None and head in ('```', '~~~'):
+            fence = head
+            out.append(line)
+            i += 1
+            continue
+        if fence is not None and head == fence:
+            fence = None
+            out.append(line)
+            i += 1
+            continue
+        m = _EXEC_DIRECTIVE.match(line) if fence is None else None
+        if not m:
+            out.append(line)
+            i += 1
+            continue
+
+        module_spec = m.group(1).strip()
+        # Consume any indented RST option lines (":code: false" etc.)
+        # directly below the directive, before the next blank line —
+        # whether or not they change the outcome, they must not leak
+        # into the prose as literal text.
+        j = i + 1
+        code_false = False
+        while j < len(lines) and lines[j].strip() and lines[j].startswith((' ', '\t')):
+            if _CODE_FALSE.match(lines[j]):
+                code_false = True
+            j += 1
+
+        file_path = _exec_module_to_path(module_spec)
+        if file_path.resolve() in sourced_paths:
+            # Dedupe, explicitly: the source is already shown via a
+            # hand-paired `.. source::` elsewhere on the page, so drop
+            # this line ourselves rather than trust that dash-improve-
+            # my-llms silently strips whatever `.. ` syntax it doesn't
+            # recognise — observed empirically for `.. exec::` and
+            # `.. kwargs::`, but not a documented contract to lean on.
+            pass
+        elif code_false:
+            out.append(f'\n<!-- {module_spec} ({file_path.name}): source withheld (:code: false) -->\n')
+        else:
+            out.append(expand_file(module_spec))
+        i = j
+    return '\n'.join(out)
+
+
 _KWARGS_DIRECTIVE = re.compile(r'^\.\. kwargs::(.+?)$', re.MULTILINE)
 
 
@@ -346,7 +461,16 @@ for file in files:
     page_tiers.register(metadata.endpoint, metadata.tier,
                         llms_public=metadata.llms_public)
 
-    expanded = _expand_kwargs_directives(_expand_source_directives(content))
+    # ORDER MATTERS: exec must run BEFORE source. _expand_exec_directives'
+    # dedupe scan looks for `.. source::` lines naming its own target in
+    # the text it receives — if source expansion ran first, every
+    # `.. source::` line would already be a fenced block and the dedupe
+    # scan would find nothing to dedupe against, silently doubling every
+    # hand-paired page's source. kwargs has no such dependency and stays
+    # last.
+    expanded = _expand_kwargs_directives(
+        _expand_source_directives(_expand_exec_directives(content))
+    )
     # The full record, matching the dash.register_page call above. These two
     # calls must never describe the same page differently: the thinner record
     # here is exactly how the fleet shipped "flexlayout-dash | Theming" to

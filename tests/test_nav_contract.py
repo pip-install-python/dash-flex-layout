@@ -346,20 +346,36 @@ def test_other_apps_dropdown_is_solid_and_every_primary_app_has_an_icon(app_modu
 # ------------------------------------------------------------- item 18 --
 
 
-def test_battery_hidden_paths_match_the_registry(app_module):
-    """The battery's literal tuple is pinned against the registry, so a page
-    added, renamed or deleted moves it in the same change — this drifted
-    once already (scripts/network_smoke.py's HIDDEN_DOC_PATHS still named
-    two canary paths that were never real pages while the real
-    /admin/traffic page this fork added went unlisted)."""
+def test_battery_hidden_paths_match_the_registry(app_module, client):
+    """Subset-plus-reality-check, NOT equality (item 18 amendment). Every
+    registered admin page must be listed (equality alone would still catch
+    that half); anything EXTRA in the tuple beyond the registered admin
+    pages must be verified as GENUINELY hidden (404 on the crawler lane),
+    not assumed. Equality would delete a real hidden surface that is not
+    under /admin/ (a canary, a retired page's llms.txt); subset alone
+    loses the stale-canary detection that caught this fork's own drift:
+    HIDDEN_DOC_PATHS still named two placeholder paths that were never
+    real pages while /admin/traffic (a real page item 16 added) was
+    unlisted."""
     import dash
 
     from scripts.network_smoke import HIDDEN_DOC_PATHS
 
     admin = {p["path"] for p in dash.page_registry.values() if p["path"].startswith("/admin/")}
-    assert set(HIDDEN_DOC_PATHS) == {f"{p}/llms.txt" for p in admin}, (
-        "network_smoke.HIDDEN_DOC_PATHS drifted from the registered admin pages"
-    )
+    required = {f"{p}/llms.txt" for p in admin}
+    listed = set(HIDDEN_DOC_PATHS)
+
+    missing = required - listed
+    assert not missing, f"registered admin pages missing from HIDDEN_DOC_PATHS: {missing}"
+
+    extras = listed - required
+    for path in extras:
+        resp = client.get(path, user_agent="Mozilla/5.0 (compatible; Googlebot/2.1)")
+        assert resp.status == 404, (
+            f"HIDDEN_DOC_PATHS lists {path!r} as hidden but the crawler lane "
+            f"answered {resp.status} — a stale canary the registry can't catch "
+            "because it names no real page"
+        )
 
 
 def test_api_reference_falls_back_to_the_committed_extract_then_docstrings(tmp_path, monkeypatch):
@@ -409,12 +425,19 @@ def test_every_test_client_user_names_headers():
     — so a mark_hidden page 404s and an every-page-200 loop goes red at the
     floor bump (exactly the scripts/smoke_test.py defect item 18's checks
     2/3 pass found and fixed on this fork). Any file that drives
-    `.test_client()` must pass headers (a named UA)."""
+    `.test_client()` must pass a User-Agent.
+
+    `headers=` alone is NOT evidence: tests/test_llms_routes.py had a
+    `headers={"CF-IPCountry": "FR"}` call that satisfied a bare `"headers="
+    in src` check while naming no lane at all — a false negative found
+    while tightening this pin (item 18 amendment). Look specifically for
+    something UA-shaped."""
     offenders = []
     for folder in ("tests", "scripts"):
         for path in sorted((REPO / folder).glob("*.py")):
             src = path.read_text()
-            names_ua = "headers=" in src or "HTTP_USER_AGENT" in src or "user_agent=" in src
+            names_ua = ("User-Agent" in src or "HTTP_USER_AGENT" in src
+                       or "user_agent=" in src)
             if ".test_client()" in src and not names_ua:
                 offenders.append(f"{folder}/{path.name}")
     assert offenders == [], offenders

@@ -432,6 +432,74 @@ knowing about:
   port and verify them against an actual CD run rather than trust an
   unexercised diff.
 
+**Amendment (2026-08-31, boilerplate seat's post-report correction),
+applied same day:**
+
+- **The /api lastmod was a fabricated date.** The first pass wrote
+  `date.today()` — "the day I ran the builder" — exactly the class
+  muicharts shipped and caught live within minutes: a sitemap asserting
+  a content date that is not one. Fixed the SHAPE, not just the value:
+  `scripts/build_api_metadata.py::changelog_date_for_version()` derives
+  `generated` from CHANGELOG.md's dated entry for the INSTALLED
+  package's own `__version__` (2.0.0 → 2026-08-02, CHANGELOG.md's own
+  release date, not 2026-08-31 when this script happened to run), and
+  REFUSES to write today's date when no dated entry exists rather than
+  inventing one. Pinned by
+  `tests/test_seo_icons.py::test_api_lastmod_is_the_changelog_date_not_the_day_the_builder_ran`,
+  which derives the expected date independently (not by re-reading the
+  same file the builder wrote) so a version bump that forgets to
+  regenerate the extract goes red.
+- **The exec-lane defect (mechanism 4's OTHER directive) — found on this
+  fork's own docs, seventh instance network-wide of the kwargs case,
+  first of the exec case.** All SIX of this fork's `.. exec::` directives
+  (one per topic doc, rendering each page's live component demo)
+  reached the browser fully and were COMPLETELY ABSENT from every
+  page's `/<page>/llms.txt` — `/basic/llms.txt` measured 1256 bytes
+  before the fix, ran "...maximize a tabset..." straight into
+  "### Notes" with the entire example source gone; 3266 bytes after.
+  Fixed with the three-step precedence (dedupe on a paired
+  `.. source::`, honour `:code: false` as a visible marker, else
+  expand) in `pages/markdown.py::_expand_exec_directives`, sharing the
+  same fence-aware pattern `_expand_source_directives` uses. PIPELINE
+  ORDER MATTERS and was wrong on the first pass: exec must expand
+  BEFORE source (`_expand_source_directives(_expand_exec_directives(content))`)
+  because exec's dedupe scan looks for raw `.. source::` lines in the
+  text it receives — source-first would have already turned every
+  `.. source::` line into a fenced block, and the scan would dedupe
+  against nothing, silently doubling every hand-paired page's source.
+  Measured across this fork's own docs: 0 of 6 directives dedupe or
+  flag, so all six expand. Pinned by `tests/test_exec_lane.py` (9
+  tests: unit fixtures for all three precedence branches plus fence-
+  awareness and a missing-target error, a live sweep of every real
+  `.. exec::` in docs/, and a mutation check).
+- **Three test-pin precision fixes**, all corrections to pins this
+  fork's own item 18 pass had already shipped as "done":
+  - `test_every_test_client_user_names_headers` checked for the bare
+    substring `"headers="` anywhere in a file, which a
+    `headers={"CF-IPCountry": "FR"}` call (tests/test_llms_routes.py,
+    naming no lane at all) satisfied vacuously. Now checks specifically
+    for `User-Agent`/`HTTP_USER_AGENT`/`user_agent=`; named UAs added
+    to the two calls that were actually bare.
+  - `test_battery_hidden_paths_match_the_registry` used strict equality
+    between `HIDDEN_DOC_PATHS` and the registry's admin pages — which
+    would delete a legitimately hidden non-admin canary the day one is
+    ever added. Now subset-plus-reality-check: every registered admin
+    page must be listed (unchanged), and anything EXTRA in the tuple
+    must be verified 404 on the crawler lane rather than assumed.
+  - `test_a_docs_page_really_carries_its_parsed_content`'s positive
+    control resolved its target page via `lib.aside.ASIDE_PATHS` — a
+    side effect of a page carrying `.. toc::`, which would silently
+    retarget the test the day a page loses that directive for
+    unrelated reasons. Now selects directly from the registry: the
+    first page (by path) carrying a `category`, this fork's own marker
+    for "a real topic doc".
+  - `test_admin_paths_absent_from_sitemap_llms_and_sidebar` swept only
+    `/llms.txt` and sitemap.xml. Extended to also sweep `/llms-small.txt`
+    and `/llms-full.txt` (both LINK-shaped checks, matching the root
+    index's own `(path)` / `path/llms.txt` pattern, with a positive
+    control proving the tier docs actually link real content) — no
+    leak found on this fork, but the surfaces are now covered.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites

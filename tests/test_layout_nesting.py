@@ -112,13 +112,21 @@ def test_no_page_nests_a_list_inside_a_children_list(registry):
 def test_a_docs_page_really_carries_its_parsed_content(registry, monkeypatch):
     """The positive control. The walk alone passes on a page that is empty
     for any OTHER reason — the same symptom the defect produces. A real
-    docs page (derived from the registry: the first page that registered a
-    TOC) must render real depth and contain its own heading."""
+    docs page, derived STRAIGHT from the registry (item 18 amendment: not
+    via lib.aside.ASIDE_PATHS, which is a side effect of a page carrying
+    `.. toc::` and would change silently the day one loses it) — the
+    first page (by path) that carries a `category`, this fork's own
+    marker for "a real topic doc" (pages/markdown.py registers it from
+    frontmatter; home/admin/changelog/api pages never set one) — must
+    render real depth and contain its own heading."""
     monkeypatch.setenv("ALLOW_UNGATED_ADMIN", "0")
-    from lib.aside import ASIDE_PATHS
 
-    by_path = {p.get("path"): p for p in registry.values()}
-    page = by_path[sorted(ASIDE_PATHS)[0]]
+    docs_pages = sorted(
+        (p for p in registry.values() if p.get("category") and p.get("path")),
+        key=lambda p: p["path"],
+    )
+    assert docs_pages, "no registered page carries a category — nothing to select"
+    page = docs_pages[0]
     layout = _resolve(page["layout"])
 
     nodes: list = []

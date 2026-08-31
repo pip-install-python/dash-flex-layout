@@ -34,20 +34,38 @@ def test_every_admin_path_is_machine_hidden(app):
 
 
 def test_admin_paths_absent_from_sitemap_llms_and_sidebar(client, app):
+    """The corpus sweep covers the TIER DOCS too (item 18 amendment):
+    /llms-small.txt and /llms-full.txt are their own index documents, not
+    derived from /llms.txt, so a leak into either would slip past a
+    sweep that only reads the root index — a page's prose can leak a
+    link to a hidden page (hyperlinking it from elsewhere) even when
+    every structural pin (navbar, sitemap) passes. Both clauses are
+    LINK-shaped: the same `(path)` / `path/llms.txt` check the root
+    index gets, not a bare substring — an admin path could otherwise
+    appear inside an UNRELATED word and false-positive."""
     import dash
 
     from components.navbar import create_content
 
     sitemap = client.get("/sitemap.xml").text
     llms = client.get("/llms.txt").text
+    llms_small = client.get("/llms-small.txt").text
+    llms_full = client.get("/llms-full.txt").text
     tree = str(create_content(dash.page_registry.values()))
+
+    def link_leaked(path: str, doc: str) -> bool:
+        return f"{path})" in doc or f"{path}/llms.txt" in doc
 
     leaked = []
     for path in _admin_paths():
         if f"{path}</loc>" in sitemap:
             leaked.append(f"{path} in sitemap.xml")
-        if f"{path})" in llms or f"{path}/llms.txt" in llms:
+        if link_leaked(path, llms):
             leaked.append(f"{path} in /llms.txt")
+        if link_leaked(path, llms_small):
+            leaked.append(f"{path} in /llms-small.txt")
+        if link_leaked(path, llms_full):
+            leaked.append(f"{path} in /llms-full.txt")
         if path in tree:
             leaked.append(f"{path} in the startup sidebar tree")
     assert leaked == [], f"admin pages published: {leaked}"
@@ -57,3 +75,7 @@ def test_admin_paths_absent_from_sitemap_llms_and_sidebar(client, app):
     assert "/getting-started</loc>" in sitemap
     assert "/getting-started" in llms
     assert "/getting-started" in tree
+    assert link_leaked("/getting-started", llms_small) or link_leaked("/getting-started", llms_full), (
+        "neither tier doc links a single real page — the positive control "
+        "would let a broken tier doc pass this test vacuously"
+    )
