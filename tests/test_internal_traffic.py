@@ -23,6 +23,7 @@ kept at all:
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 
 import pytest
@@ -162,6 +163,160 @@ def test_real_traffic_is_still_counted(client):
 
     assert after["human_hits"] == before["human_hits"] + 1
     assert after["bot_hits"] == before["bot_hits"] + 1
+
+
+# --------------------------------------------------------- the read table --
+#
+# The other half of "counted nowhere" (SYNC-1.6.43 item 1). Read rows do not
+# arrive from a request — dash-improve-my-llms calls `record_read` through its
+# `on_document_read` hook — so these probe the tracker in process against a
+# tempfile ledger rather than through `client`.
+#
+# The drop is keyed on the event's `ua`. `EVENT_FIELDS` has `ua` and has never
+# had `user_agent`; keying on the wrong name is a silent no-op, which is this
+# contract's own failure mode, so the name is pinned below rather than assumed.
+
+
+@pytest.fixture
+def read_tracker(tmp_path):
+    from lib.analytics_tracker import AnalyticsTracker
+
+    return AnalyticsTracker(data_file=str(tmp_path / "visitor_analytics.json"))
+
+
+def _read_event(**overrides):
+    """One `on_document_read` event, crawler-lane by default."""
+    base = {
+        "ts": time.time(),
+        "host": "flexlayout.2plot.dev",
+        "path": "/basic/llms.txt",
+        "method": "GET",
+        "tier": "page",
+        "lane": "crawler",
+        "bot_type": "training",
+        "vendor_key": "gptbot",
+        "verified": "unverified",
+        "policy": None,
+        "verdict": "served",
+        "status": 200,
+        "bytes": 4096,
+        "ua": CRAWLER_UA,
+        "client_ip": "203.0.113.9",
+    }
+    base.update(overrides)
+    return base
+
+
+def _read_rows(read_tracker):
+    """Read rows on disk, flushing first.
+
+    A tracker that has never flushed anything has no file yet — `flush()`
+    returns early when both buffers are empty — so the "before" of every delta
+    below is a legitimate zero rather than an error.
+    """
+    read_tracker.flush()
+    try:
+        return json.loads(read_tracker.data_file.read_text()).get("reads", [])
+    except FileNotFoundError:
+        return []
+
+
+def test_the_event_field_is_ua_across_every_wheel_the_floor_admits():
+    """The name the drop keys on, pinned at the source.
+
+    A range, not a pair: this fork's `/healthz` carries no `llms_version`, so
+    it cannot compare CI against production. Asserting the field name over the
+    floor's whole admissible range is strictly stronger anyway, and needs no
+    dashboard.
+    """
+    from dash_improve_my_llms._ledger import EVENT_FIELDS
+
+    assert "ua" in EVENT_FIELDS
+    assert "user_agent" not in EVENT_FIELDS, (
+        "a drop keyed on `user_agent` would be a silent no-op"
+    )
+
+
+def test_an_internal_read_is_counted_nowhere(read_tracker):
+    before = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua=internal_ua("network-smoke")))
+    read_tracker.record_read(_read_event(ua=INTERNAL_UA))
+    after = len(_read_rows(read_tracker))
+    print(f"internal read probe: reads {before} -> {after}")
+    assert after == before
+
+
+def test_a_crawler_shaped_read_carrying_the_token_stays_internal(read_tracker):
+    """The battery's crawler probe, on the read path.
+
+    Same shape as the visit-side test above: the token wins over the lane.
+    """
+    before = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua=f"{CRAWLER_UA} {INTERNAL_UA}"))
+    after = len(_read_rows(read_tracker))
+    print(f"tokened crawler read probe: reads {before} -> {after}")
+    assert after == before
+
+
+def test_the_read_token_is_matched_case_insensitively(read_tracker):
+    before = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua="2PLOT-INTERNAL/1.0 Health-Sweep"))
+    after = len(_read_rows(read_tracker))
+    print(f"upper-case token read probe: reads {before} -> {after}")
+    assert after == before
+
+
+def test_neutralising_the_token_restores_the_row(read_tracker):
+    """The mutation line, and the load-bearing half of this file.
+
+    A delta of 0 also happens when the probe never reached the read path at
+    all — `record_read` doing nothing is indistinguishable from `record_read`
+    dropping correctly. Send the IDENTICAL event with the token neutralised
+    and require the row back.
+    """
+    tokened = f"{CRAWLER_UA} {INTERNAL_UA}"
+    neutralised = tokened.replace(INTERNAL_UA_TOKEN, "2plot-external")
+    assert INTERNAL_UA_TOKEN not in neutralised.lower()
+
+    before = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua=tokened))
+    dropped = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua=neutralised))
+    kept = len(_read_rows(read_tracker))
+
+    print(
+        f"mutation: reads {before} -> {dropped} (tokened) -> {kept} (neutralised)"
+    )
+    assert dropped == before, "the tokened read was counted"
+    assert kept == dropped + 1, (
+        "the neutralised read was dropped too — record_read is dropping "
+        "everything, or never ran"
+    )
+
+
+def test_a_real_crawler_read_is_still_counted(read_tracker):
+    before = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua=CRAWLER_UA))
+    after = len(_read_rows(read_tracker))
+    print(f"real crawler read probe: reads {before} -> {after}")
+    assert after == before + 1
+
+
+def test_a_ua_less_read_is_kept(read_tracker):
+    """An absent UA is the CRAWLER LANE, not machinery.
+
+    `classify()` has filed UA-less requests there since 2.8.0, so this is a
+    real fetch by something that declined to identify itself. A defensive
+    rewrite that turns the None case into a drop is the regression this pins;
+    `event.get("ua", "")` would additionally raise, since the key is present
+    and None rather than absent.
+    """
+    before = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua=None))
+    read_tracker.record_read(_read_event(ua=""))
+    after = len(_read_rows(read_tracker))
+    print(f"UA-less read probe: reads {before} -> {after}")
+    assert after == before + 2
 
 
 # ----------------------------------------------------------------- outbound --

@@ -500,6 +500,44 @@ applied same day:**
     control proving the tier docs actually link real content) — no
     leak found on this fork, but the surfaces are now covered.
 
+### 20. SYNC-1.6.43 item 1 — the version check is a RANGE here, never a pair
+
+The spec offers two shapes for proving the read-table drop keys on the
+right field name. The pair ("compare your CI version against
+production") is **not available on this fork and never will be**:
+divergence 4 records that this host's `/healthz` payload carries the
+APP's `version`, and it carries no `llms_version` — there is no wire
+surface anywhere on flexlayout.2plot.dev that names the resolved
+`dash-improve-my-llms` version. `grep -rn llms_version lib/ tests/`
+returns nothing, and that is deliberate, not an oversight.
+
+So the pinned check is the range the spec calls "strictly stronger and
+dashboard-free": across EVERY wheel the floor `>=2.8.0` admits, `ua` is
+in `EVENT_FIELDS` and `user_agent` is not. Measured 2026-09-04 by
+IMPORTING each wheel (not parsing it), package file count taken before
+the import so `__pycache__` cannot inflate it:
+
+| version | files (whole wheel) | n  | `ua` | `user_agent` | `vendor_class` |
+|---------|--------------------|----|------|--------------|----------------|
+| 2.8.0   | 45                 | 15 | yes  | no           | no             |
+| 2.9.0   | 45                 | 15 | yes  | no           | no             |
+| 2.9.1   | 46                 | 15 | yes  | no           | no             |
+| 2.9.2   | 46                 | 16 | yes  | no           | yes            |
+| 2.9.4   | 46                 | 16 | yes  | no           | yes            |
+| 2.10.0  | 47                 | 16 | yes  | no           | yes            |
+
+`tests/test_internal_traffic.py::test_the_event_field_is_ua_across_every_wheel_the_floor_admits`
+pins the invariant against whichever wheel is resolved at run time.
+
+A sync must NOT "restore" a CI-vs-production pair assertion here. It
+would have nothing to read on the production side and would either skip
+silently or pin a constant — both worse than the range.
+
+The floor stays `>=2.8.0` this round, deliberately: a `>=` floor cannot
+pull a newer wheel through a cached Docker layer, and the requirements
+line changing IS the cache bust. Not busting it as a side effect of
+this port is the point.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites

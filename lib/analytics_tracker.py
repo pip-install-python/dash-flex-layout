@@ -390,9 +390,35 @@ class AnalyticsTracker:
         it appends; the flush does the disk work.
 
         ``client_ip`` is dropped unless ``ANALYTICS_KEEP_CLIENT_IP=1``.
+
+        Internal traffic is dropped here too — see the long note in
+        :meth:`track_visit`. "Counted nowhere" includes the READ table; a
+        contract kept on only the ``visits`` side is half a contract, and the
+        half that was missing is why the network's own probes (the hub's
+        health sweep, every satellite's link audit, every post-deploy
+        battery) were the busiest reader of these docs.
         """
         if not isinstance(event, dict):
             return
+
+        # Keyed on ``ua`` — the name ``EVENT_FIELDS`` uses. ``user_agent`` is
+        # track_visit's PARAMETER name and does not exist in this event, so a
+        # drop keyed on it would be a silent no-op: the exact failure mode this
+        # check exists to prevent. Matched before the row is built, for
+        # track_visit's reason 2 — a row filtered on the way out is still a
+        # row somebody has to know to discount.
+        #
+        # A ``ua: None`` read is KEPT, deliberately. ``classify()`` has filed
+        # UA-less requests in the crawler lane since 2.8.0, so an absent UA is
+        # a real fetch by something that declined to identify itself, not
+        # machinery. ``(… or "")`` is load-bearing: ``event.get("ua", "")``
+        # returns None when the key is present-and-None and raises on
+        # ``.lower()``.
+        from lib.constants import INTERNAL_UA_TOKEN
+
+        if INTERNAL_UA_TOKEN in (event.get("ua") or "").lower():
+            return
+
         row = {k: event.get(k) for k in EVENT_FIELDS}
         if not KEEP_CLIENT_IP:
             row.pop("client_ip", None)
