@@ -659,6 +659,41 @@ this seat in fifteen further probes across three sessions (0.17-0.38 s, all
 200). The two seats reach the origin by different paths, so this is recorded
 as unexplained rather than resolved.
 
+### 24. SYNC-1.6.44 item 13 — no `sync/` here: this repo CONSUMES specs
+
+The item adds a spec-format rule to `sync/README.md`: a detect must parse,
+or strip comments AND STRINGS, because a raw grep matches the comment
+explaining the absence of the thing it hunts.
+
+There is no `sync/` directory on this fork and there never has been — this
+repo consumes drops, it does not author them, and
+`tests/test_claude_kit.py` already skips its spec-authoring check with
+exactly that reason. So the FILE half is not-applicable.
+
+The RULE half is not, and it is adopted in practice rather than in prose:
+this round it caught two real detects on this tree, both written by this
+seat and both failing in exactly the way item 13 predicts —
+
+* `tests/test_docs_sweep.py` grepped CI's lint job for "flake8" and matched
+  the py_compile step's own comment explaining that there is no flake8
+  here;
+* `tests/test_a11y_block.py` had to strip comments before reading
+  header.py, because the comment beside the fix names `trigger="hover"`
+  while the code does the opposite.
+
+Both strip comments now, and both say why at the point of the strip.
+
+Item 13's ACCEPTANCE, re-run on this tree 2026-09-05 — the SYNC-1.6.43
+item-3 detects, read case-insensitively AND with whitespace flattened,
+since two of the fleet's five failures last round were formatting-bound:
+
+  measured on a green push ........... 1
+  corpus is non-empty ................ 1
+  when a lane disagrees .............. 1
+  verify the artifact the claim is about  1
+
+All four green under both readings.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
