@@ -549,6 +549,17 @@ the framework.
 
 Recorded rather than skipped, because "the file is absent" and "the
 behaviour is absent" are different claims and only the second one matters.
+
+WHICH MECHANISM ANSWERS HEAD HERE (ops' census, 2026-09-05): **Werkzeug's
+automatic HEAD-from-GET, not the package**. The distinction matters because
+dash-improve-my-llms covers HEAD only from 2.9.4, and this fork's floor is
+`>=2.8.0` — so a record that credited the package would be claiming coverage
+this host cannot rely on. Measured against a BARE Flask app with a single
+GET rule and no dimll in the picture at all: GET 200, HEAD 200, empty body.
+The parity is therefore safe across the floor's whole admissible range
+rather than only above 2.9.4, and this fork never carried
+HeadAsGetMiddleware in the first place (the 1.6.32/33 fix was never ported
+here) — an ABSENT mechanism, never a retired one.
 Item 2's acceptance run, against production at 06cc418's parent, GET vs HEAD
 compared on status, content-type and the Link headers:
 

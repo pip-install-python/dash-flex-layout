@@ -487,31 +487,104 @@ def test_the_openapi_knobs_are_filtered_to_what_the_resolved_package_accepts():
     """The guard this fork needs and the template does not.
 
     The three `openapi_*` knobs arrived in dimll 2.9.4. `LLMSConfig` at 2.8.0
-    raises `TypeError: unexpected keyword argument 'openapi_title'` on the
-    identical call, and this fork's floor is `>=2.8.0` deliberately (the
-    fleet pin lands at 1.6.45 as ==2.10.0). An unguarded port would take the
-    app down at IMPORT wherever the floor itself resolves — this venv, CI's
-    package leg, or any image whose dependency layer still holds 2.8.0.
+    has ZERO openapi parameters and raises `TypeError: unexpected keyword
+    argument 'openapi_title'` on the identical call. This fork's floor is
+    `>=2.8.0` deliberately (the fleet pin lands at 1.6.45 as ==2.10.0), so an
+    unguarded port would take the app down AT IMPORT wherever the floor
+    itself resolves — this venv, CI's package leg, or any image whose
+    dependency layer still holds 2.8.0.
 
-    Pinned in both directions so the filter cannot rot into a no-op that
-    silently drops the knobs on a version that would have taken them.
+    Raising `LLMS_PKG_FLOOR` instead would be a brick, not a guard: a boot
+    floor above what requirements.txt guarantees refuses to start on a
+    perfectly valid install.
+
+    BOTH DIRECTIONS, and against SHAPES rather than whichever wheel this
+    interpreter resolved — a guard exercised one-sided is exactly the defect
+    it exists to prevent.
     """
-    import inspect
+    import run
 
-    from dash_improve_my_llms import LLMSConfig
+    knobs = {"openapi_title": "T", "openapi_description": "D",
+             "openapi_version": "1.0"}
 
-    accepted = inspect.signature(LLMSConfig).parameters
-    knobs = ("openapi_title", "openapi_description", "openapi_version")
-    supported = [k for k in knobs if k in accepted]
+    class ConfigLike280:
+        def __init__(self, warn_missing_llms_doc=False):
+            pass
 
-    assert supported in ([], list(knobs)), (
-        f"partial openapi knob support is not a shape this guard handles: "
-        f"{supported}"
+    class ConfigLike294:
+        def __init__(self, warn_missing_llms_doc=False, openapi_title=None,
+                     openapi_description=None, openapi_version=None):
+            self.openapi_title = openapi_title
+
+    class ConfigLikeKwargs:
+        def __init__(self, warn_missing_llms_doc=False, **kw):
+            self.kw = kw
+
+    assert run.supported_openapi_kwargs(ConfigLike280, knobs) == {}
+    assert run.supported_openapi_kwargs(ConfigLike294, knobs) == knobs
+    assert run.supported_openapi_kwargs(ConfigLikeKwargs, knobs) == knobs
+
+    # And the calls those subsets produce must actually construct.
+    ConfigLike280(warn_missing_llms_doc=True,
+                  **run.supported_openapi_kwargs(ConfigLike280, knobs))
+    got = ConfigLike294(warn_missing_llms_doc=True,
+                        **run.supported_openapi_kwargs(ConfigLike294, knobs))
+    assert got.openapi_title == "T", "a 2.9.4-shaped config was starved"
+
+    # The unguarded call is what would break boot on the older shape.
+    with pytest.raises(TypeError):
+        ConfigLike280(warn_missing_llms_doc=True, **knobs)
+
+
+def test_the_boot_floor_is_not_raised_to_paper_over_the_knobs():
+    """A boot floor above what requirements.txt guarantees is a brick.
+
+    Pinned so a later seat cannot "fix" the guard by raising the floor: the
+    two numbers must agree, and both move together at 1.6.45.
+    """
+    import re
+
+    import run
+
+    from conftest import REPO_ROOT
+
+    line = [ln for ln in (REPO_ROOT / "requirements.txt").read_text().splitlines()
+            if ln.startswith("dash-improve-my-llms")]
+    assert len(line) == 1, line
+    declared = tuple(int(n) for n in re.search(r"(\d+)\.(\d+)\.(\d+)", line[0]).groups())
+    assert run.LLMS_PKG_FLOOR == declared, (
+        f"boot floor {run.LLMS_PKG_FLOOR} does not match requirements {declared}"
     )
-    if supported:
-        # A version that takes them must actually receive them.
-        LLMSConfig(warn_missing_llms_doc=True, openapi_title="x",
-                   openapi_description="y", openapi_version="1.0")
-    else:
-        with pytest.raises(TypeError):
-            LLMSConfig(warn_missing_llms_doc=True, openapi_title="x")
+
+
+def test_head_parity_here_is_flasks_doing_not_the_packages():
+    """WHICH mechanism answers HEAD on this host (ops' item-2 census).
+
+    This fork never had HeadAsGetMiddleware, so "retire or record" must not
+    read an ABSENT mechanism as a retired one. The package covers HEAD from
+    2.9.4; this venv resolves 2.8.0 and HEAD still answers — so the coverage
+    here is Werkzeug's automatic HEAD-from-GET, independent of the package
+    version, which is what makes the parity safe across the floor's whole
+    range rather than only above 2.9.4.
+
+    Measured against a BARE Flask app with a single GET route, so nothing in
+    this repo or the package can be doing the work.
+    """
+    import flask
+
+    bare = flask.Flask("head_census")
+
+    @bare.get("/only-get")
+    def _only_get():
+        return "body"
+
+    probe = bare.test_client()
+    ua = {"headers": {"User-Agent": "curl/8 2plot-internal/probe census"}}
+    get_r = probe.get("/only-get", **ua)
+    head_r = probe.head("/only-get", **ua)
+
+    assert get_r.status_code == head_r.status_code == 200, (
+        "Werkzeug did not answer HEAD from a GET-only rule — the recorded "
+        "reason in DIVERGENCES 21 no longer holds"
+    )
+    assert head_r.get_data() == b"", "HEAD returned a body"

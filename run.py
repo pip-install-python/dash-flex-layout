@@ -463,15 +463,30 @@ ACCESS_ENABLED = _access.configure(
 # resolves the floor itself — this venv, CI's package leg, and any image
 # whose dependency layer cache still holds 2.8.0. Verified: 2.8.0
 # rejects, 2.9.4 and 2.10.0 accept.
-_openapi_knobs = {
+def supported_openapi_kwargs(config_cls, knobs: dict) -> dict:
+    """The subset of ``knobs`` that ``config_cls`` will actually accept.
+
+    Extracted so the guard is testable against a 2.8.0-SHAPED and a
+    2.9.4-shaped config in the same run, rather than only against whichever
+    wheel this interpreter happens to resolve — a guard tested one-sided is
+    the failure mode it exists to prevent.
+
+    The whole function is deleted when the fleet pin lands at 1.6.45.
+    """
+    accepted = inspect.signature(config_cls).parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in accepted.values()):
+        return dict(knobs)      # **kwargs swallows anything
+    return {k: v for k, v in knobs.items() if k in accepted}
+
+
+OPENAPI_KNOBS = {
     "openapi_title": f"{SITE_SHORT_NAME} API",
     "openapi_description": SITE_DESCRIPTION,
     "openapi_version": "1.0",
 }
-_accepted = inspect.signature(LLMSConfig).parameters
 add_llms_routes(app, LLMSConfig(
     warn_missing_llms_doc=True,
-    **{k: v for k, v in _openapi_knobs.items() if k in _accepted},
+    **supported_openapi_kwargs(LLMSConfig, OPENAPI_KNOBS),
 ))
 
 # The ledger row (dimll 2.8.0): the package emits one event per corpus
