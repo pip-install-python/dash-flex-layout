@@ -121,3 +121,65 @@ def test_verified_na_footnote_mentions_claudebot_by_name():
     rendered = str(traffic._footnote())
     assert "n/a" in rendered
     assert "Anthropic" in rendered or "ClaudeBot" in rendered
+
+
+# ------------------------------------------------- enforcement is LABELLED --
+#
+# 1.6.44 item 3. A read the policy refused is evidence the policy fired; it is
+# never folded into the serve count and never rendered as a bare colour.
+
+
+def _read_row(path, verdict, vendor="gptbot"):
+    from datetime import datetime
+
+    return {"dt": datetime.now(), "path": path, "verdict": verdict,
+            "vendor_key": vendor, "verified": "unverified", "bytes": 10}
+
+
+def test_a_denied_read_is_grouped_by_verdict_not_folded_into_the_path():
+    mod = _traffic_module()
+    rows = [
+        _read_row("/hidden/llms.txt", "denied"),
+        _read_row("/hidden/llms.txt", "served"),
+        _read_row("/hidden/llms.txt", "served"),
+    ]
+    _key, _verified, paths = mod.top_paths(rows)[0]
+    by_verdict = {v: n for _p, v, n in paths}
+
+    assert by_verdict == {"denied": 1, "served": 2}, (
+        "the same path under two verdicts collapsed into one row — "
+        "enforcement is being reported as traffic"
+    )
+
+
+def test_serve_counts_keeps_the_denied_read_out_of_the_serve_total():
+    mod = _traffic_module()
+    rows = [_read_row("/a", "served"), _read_row("/b", "denied"),
+            _read_row("/c", "blocked"), _read_row("/d", "rate_limited")]
+    served, not_served = mod.serve_counts(rows)
+    assert (served, not_served) == (1, 3)
+
+
+def test_the_verdict_cell_carries_the_WORD_not_only_a_colour():
+    """Colour alone puts the meaning in a channel some readers never get."""
+    mod = _traffic_module()
+    for verdict in ("served", "denied", "blocked", "rate_limited",
+                    "priced", "gated"):
+        badge = mod._verdict_cell(verdict)
+        assert verdict in str(badge.children), verdict
+        assert getattr(badge, "color", None), f"{verdict} rendered with no tone"
+
+
+def test_an_unknown_verdict_still_renders_labelled():
+    """A verdict the package adds later must not vanish from the board."""
+    mod = _traffic_module()
+    badge = mod._verdict_cell("quarantined")
+    assert "quarantined" in str(badge.children)
+
+
+def test_the_rendered_table_has_a_verdict_column():
+    mod = _traffic_module()
+    block = mod.top_paths_block([_read_row("/hidden/llms.txt", "denied")])
+    rendered = str(block)
+    assert "verdict" in rendered, "the reads table shipped without the column"
+    assert "denied" in rendered
