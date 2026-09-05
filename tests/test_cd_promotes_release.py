@@ -134,3 +134,93 @@ def test_the_road_is_recorded_in_divergences():
         "DIVERGENCES.md must record that Render deploys `release`, "
         "not `main`"
     )
+
+
+# ------------------------------------- 1.6.44 item 12: one CI run per push --
+#
+# CD is a Path in this module, not text — read both workflows explicitly here
+# rather than assuming either name already holds a string.
+
+CI_TEXT = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+CD_TEXT = CD.read_text()
+
+
+
+def _triggers(workflow_text: str) -> dict:
+    """The `on:` block of a workflow, parsed.
+
+    PyYAML RESOLVES AN UNQUOTED `on:` KEY TO THE BOOLEAN True — YAML 1.1's
+    truthy set — so `workflow["on"]` raises KeyError on every GitHub workflow
+    file ever written. A test that catches that and moves on asserts nothing,
+    which is why this looks the key up under both spellings and FAILS if
+    neither is present rather than returning an empty dict.
+    """
+    import yaml
+
+    parsed = yaml.safe_load(workflow_text)
+    for key in (True, "on"):
+        if key in parsed:
+            return parsed[key] or {}
+    raise AssertionError(
+        f"no `on:` block found under either spelling; keys were "
+        f"{sorted(str(k) for k in parsed)}"
+    )
+
+
+def test_the_yaml_on_key_really_is_the_boolean_trap():
+    """The premise of the helper above, measured rather than believed.
+
+    If PyYAML ever stops folding `on:` to True, the helper's second branch
+    starts carrying the load and this test says the reason changed.
+    """
+    import yaml
+
+    parsed = yaml.safe_load("on:\n  pull_request:\n")
+    assert True in parsed or "on" in parsed
+    assert "on" not in parsed, (
+        "PyYAML no longer folds `on:` to the boolean True — re-read the "
+        "helper, its second branch is now the live one"
+    )
+
+
+def test_ci_does_not_run_itself_on_a_push_to_main():
+    """Item 12. Both runs resolve to the same concurrency group.
+
+    cd.yml `uses:` ci.yml, so a `push: branches: [main]` on ci.yml would
+    start a SECOND run of the same workflow on the same ref. They contend
+    for `ci-${{ github.ref }}` with cancel-in-progress, one is killed at
+    random, and when the standalone run wins CD's `test` job is CANCELLED,
+    `deploy` skips and `release` never moves — which then reads as an
+    ordinary pending push rather than as the accident it is.
+    """
+    triggers = _triggers(CI_TEXT)
+    assert "workflow_call" in triggers, (
+        "ci.yml is no longer callable — cd.yml's first job cannot run it"
+    )
+    push = triggers.get("push")
+    if push:
+        branches = (push or {}).get("branches") or []
+        assert "main" not in branches, (
+            "ci.yml runs itself on a push to main AND is called by cd.yml — "
+            "two runs, one concurrency group, one of them cancelled at random"
+        )
+
+
+def test_cd_actually_calls_ci_so_the_coverage_is_not_lost():
+    """The other half: `main` is only safe to leave off ci.yml's triggers
+    because CD runs the same matrix before it deploys. If that call ever
+    goes away, main has no CI at all and this says so."""
+    assert "uses: ./.github/workflows/ci.yml" in CD_TEXT, (
+        "cd.yml no longer calls ci.yml — main would have no matrix at all"
+    )
+
+
+def test_the_concurrency_group_is_the_one_that_would_collide():
+    """Named explicitly, because the collision is the mechanism.
+
+    If the group ever stops being keyed on the ref, two runs would coexist
+    and item 12's reasoning would no longer apply — which is a fine outcome,
+    but it should be a decision rather than a drift.
+    """
+    assert "ci-${{ github.ref }}" in CI_TEXT
+    assert "cancel-in-progress: true" in CI_TEXT
