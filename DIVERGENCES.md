@@ -538,6 +538,33 @@ pull a newer wheel through a cached Docker layer, and the requirements
 line changing IS the cache bust. Not busting it as a side effect of
 this port is the point.
 
+### 21. SYNC-1.6.44 item 2 — no HeadAsGetMiddleware to retire, and none needed
+
+The item asks every fork to retire `lib/asgi_middleware.HeadAsGetMiddleware`
+or record what it still covers. **There is nothing to retire here**:
+divergence 2 records that the ASGI half of the template is absent, and
+`lib/asgi_middleware.py` does not exist on this fork. Flask answers HEAD by
+running the GET view and discarding the body, so the shim's job is done by
+the framework.
+
+Recorded rather than skipped, because "the file is absent" and "the
+behaviour is absent" are different claims and only the second one matters.
+Item 2's acceptance run, against production at 06cc418's parent, GET vs HEAD
+compared on status, content-type and the Link headers:
+
+  /healthz /llms.txt /robots.txt /sitemap.xml /  x  browser / crawler / cli
+  **15/15 pairs matched**, `/` to a browser UA included.
+
+Same result the template reports WITHOUT the middleware. `head_get_parity_three_uas`
+in `scripts/network_smoke.py` (item 5) is where this is re-measured every run;
+this entry is why no shim is expected to be there.
+
+Related, and worth keeping beside it: the ops seat reported `HEAD /` on this
+host timing out at 25 s / 0 bytes twice on 2026-09-03. Not reproduced from
+this seat in fifteen further probes across three sessions (0.17-0.38 s, all
+200). The two seats reach the origin by different paths, so this is recorded
+as unexplained rather than resolved.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
