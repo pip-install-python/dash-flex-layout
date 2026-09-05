@@ -378,3 +378,31 @@ def test_divergences_posture_fence_is_wellformed():
                     "wrong about this repo's own tree"
                 )
                 break
+
+
+def test_divergences_separates_conventions_from_divergences():
+    """1.6.44 item 9. A guard entry is not a divergence.
+
+    Nothing in a diff distinguishes a deliberate absence from an accident, so
+    an entry recording something this fork MATCHES — or deliberately does not
+    carry — has to say so in the file the sync authors actually read. A note
+    in a test docstring is invisible to them.
+    """
+    body = (REPO / "DIVERGENCES.md").read_text()
+
+    assert "## Recorded conventions (not divergences)" in body
+    assert body.index("## This repo's divergences") < body.index(
+        "## Recorded conventions (not divergences)")
+
+    conventions = body.split("## Recorded conventions (not divergences)", 1)[1]
+    conventions = conventions.split("## Byte-owned paths", 1)[0]
+    moved = re.findall(r"^### (\d+)\.", conventions, re.M)
+    assert moved, "the section exists but no entry was moved under it"
+
+    # The numbers are load-bearing: the tree and the commit log cite these
+    # entries by number, so a tidy-up renumbering would break every citation.
+    numbers = [int(n) for n in re.findall(r"^### (\d+)\.", body, re.M)]
+    assert len(numbers) == len(set(numbers)), "duplicate DIVERGENCES numbers"
+    assert numbers and sorted(numbers) == list(range(1, max(numbers) + 1)), (
+        f"a DIVERGENCES entry went missing in the move: {sorted(numbers)}"
+    )

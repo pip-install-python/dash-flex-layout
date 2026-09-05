@@ -21,6 +21,14 @@ wholesale file copy would silently undo.
 
 ## This repo's divergences
 
+Everything under this heading is a real difference from
+dash-documentation-boilerplate. Things this fork MATCHES, or deliberately
+does not carry, live under "Recorded conventions (not divergences)" further
+down — the distinction matters because only the first kind is a candidate
+for convergence, and only the second kind is at risk of being "restored" by
+a sync that reads the absence as drift.
+
+
 ### 1. This repo is a component library first, a docs site second
 
 The template is a documentation site. This repo is the
@@ -49,19 +57,6 @@ branches, so the file stays a straight port and the probe contract
 does not fork — its module docstring says so. A sync that ports the
 ASGI modules here would add a backend this image cannot serve.
 
-### 3. `lib/health.py` — `app` sourcing: CONVERGED, no longer a divergence
-
-*Retired 2026-08-24, and left here rather than deleted because two
-fleet records still describe it as live.* This fork reads
-`payload["app"] = os.environ.get("SATELLITE_APP_KEY") or "unknown"`
-rather than `lib.satellite_reporter.app_key()`, whose fallback is
-literally `"boilerplate"` — a host that never claimed an identity
-would otherwise report someone else's. The template has since done
-the same thing: `lib/health.py:77` in 1.6.15 (`1638528`) is that
-identical line. Verified by diff, not by memory. **Nothing to defend
-in a sync any more**; the reasoning is kept because it is why the
-line reads as it does, and identity is still claimed once, at the
-marked FORK POINT near the top of `run.py`.
 
 ### 4. `lib/health.py` — the payload carries `version`
 
@@ -218,32 +213,6 @@ role & behavioral contract section verbatim — the template's copy of
 that file documents the TEMPLATE's directives and customization
 points, and porting it byte-for-byte would delete this repo's guide.
 
-### 14. `scripts/smoke_live.py` — `post()` verifies certificates: RETIRED
-
-*Retired 2026-08-26 — the template carries the fix. Left here rather
-than deleted because the fleet records that credit this fork still
-describe the divergence as live.*
-
-This fork fixed `post()` to pass `context=SSL_CONTEXT` in `154688e`
-after measuring the template-class defect against production
-2026-08-24: the script reported 0/0 for both auth POSTs while `curl
--X POST` on the same machine, the same minute, got 401 and 200. On
-any Python without OS trust-store integration (macOS — the fleet's
-whole local-dev half) every auth POST died in the TLS handshake,
-returned 0, and the check accused the app of the very
-`configure_app(app)` regression it exists to detect.
-
-The template absorbed it in 1.6.16 (`ceb0d50`, shipped as
-`SYNC-1.6.10-1.6.16` item 7). Verified at template 1.6.27
-(`055363e`): its `post()` now calls `urlopen(request,
-timeout=TIMEOUT, context=SSL_CONTEXT)` under a comment naming this
-fork's commit. **Nothing to defend in a sync any more.** One shape
-difference remains and is sanctioned by the item itself: the
-template's source pin lives in `tests/test_auth_wiring.py`, this
-fork's in
-`tests/test_smoke_live.py::test_post_verifies_certificates_the_same_way_fetch_does`
-— the item's batch-1 correction (2026-08-25) records that home as
-satisfying it, because the pin is not auth-specific.
 
 ### 15. `scripts/smoke_live.py` — this fork's copy is a SUPERSET
 
@@ -538,43 +507,6 @@ pull a newer wheel through a cached Docker layer, and the requirements
 line changing IS the cache bust. Not busting it as a side effect of
 this port is the point.
 
-### 21. SYNC-1.6.44 item 2 — no HeadAsGetMiddleware to retire, and none needed
-
-The item asks every fork to retire `lib/asgi_middleware.HeadAsGetMiddleware`
-or record what it still covers. **There is nothing to retire here**:
-divergence 2 records that the ASGI half of the template is absent, and
-`lib/asgi_middleware.py` does not exist on this fork. Flask answers HEAD by
-running the GET view and discarding the body, so the shim's job is done by
-the framework.
-
-Recorded rather than skipped, because "the file is absent" and "the
-behaviour is absent" are different claims and only the second one matters.
-
-WHICH MECHANISM ANSWERS HEAD HERE (ops' census, 2026-09-05): **Werkzeug's
-automatic HEAD-from-GET, not the package**. The distinction matters because
-dash-improve-my-llms covers HEAD only from 2.9.4, and this fork's floor is
-`>=2.8.0` — so a record that credited the package would be claiming coverage
-this host cannot rely on. Measured against a BARE Flask app with a single
-GET rule and no dimll in the picture at all: GET 200, HEAD 200, empty body.
-The parity is therefore safe across the floor's whole admissible range
-rather than only above 2.9.4, and this fork never carried
-HeadAsGetMiddleware in the first place (the 1.6.32/33 fix was never ported
-here) — an ABSENT mechanism, never a retired one.
-Item 2's acceptance run, against production at 06cc418's parent, GET vs HEAD
-compared on status, content-type and the Link headers:
-
-  /healthz /llms.txt /robots.txt /sitemap.xml /  x  browser / crawler / cli
-  **15/15 pairs matched**, `/` to a browser UA included.
-
-Same result the template reports WITHOUT the middleware. `head_get_parity_three_uas`
-in `scripts/network_smoke.py` (item 5) is where this is re-measured every run;
-this entry is why no shim is expected to be there.
-
-Related, and worth keeping beside it: the ops seat reported `HEAD /` on this
-host timing out at 25 s / 0 bytes twice on 2026-09-03. Not reproduced from
-this seat in fifteen further probes across three sessions (0.17-0.38 s, all
-200). The two seats reach the origin by different paths, so this is recorded
-as unexplained rather than resolved.
 
 ### 22. SYNC-1.6.44 item 6 — three sub-items recorded, not fixed
 
@@ -633,6 +565,99 @@ is no `lib/asgi_middleware.py` to keep in step and the template's
 lives in `lib/static_cache.py` rather than inline at the seam.
 
 The wire half of this acceptance is unverified until the stack is pushed.
+
+## Recorded conventions (not divergences)
+
+Entries here are NOT differences from the template. Each one records
+something this fork **matches**, or something it deliberately **does not
+carry** — and each is here because nothing in a diff can tell a deliberate
+absence from an accident, so a sync would otherwise "restore" it.
+
+Their numbers are unchanged from when they were divergences: the tree, the
+tests and the commit log all cite them by number, and renumbering to tidy a
+heading would break every one of those references to no benefit.
+
+The fan-out and sync authors read THIS FILE. A note in a test docstring is
+invisible to both.
+
+### 3. `lib/health.py` — `app` sourcing: CONVERGED, no longer a divergence
+
+*Retired 2026-08-24, and left here rather than deleted because two
+fleet records still describe it as live.* This fork reads
+`payload["app"] = os.environ.get("SATELLITE_APP_KEY") or "unknown"`
+rather than `lib.satellite_reporter.app_key()`, whose fallback is
+literally `"boilerplate"` — a host that never claimed an identity
+would otherwise report someone else's. The template has since done
+the same thing: `lib/health.py:77` in 1.6.15 (`1638528`) is that
+identical line. Verified by diff, not by memory. **Nothing to defend
+in a sync any more**; the reasoning is kept because it is why the
+line reads as it does, and identity is still claimed once, at the
+marked FORK POINT near the top of `run.py`.
+
+### 14. `scripts/smoke_live.py` — `post()` verifies certificates: RETIRED
+
+*Retired 2026-08-26 — the template carries the fix. Left here rather
+than deleted because the fleet records that credit this fork still
+describe the divergence as live.*
+
+This fork fixed `post()` to pass `context=SSL_CONTEXT` in `154688e`
+after measuring the template-class defect against production
+2026-08-24: the script reported 0/0 for both auth POSTs while `curl
+-X POST` on the same machine, the same minute, got 401 and 200. On
+any Python without OS trust-store integration (macOS — the fleet's
+whole local-dev half) every auth POST died in the TLS handshake,
+returned 0, and the check accused the app of the very
+`configure_app(app)` regression it exists to detect.
+
+The template absorbed it in 1.6.16 (`ceb0d50`, shipped as
+`SYNC-1.6.10-1.6.16` item 7). Verified at template 1.6.27
+(`055363e`): its `post()` now calls `urlopen(request,
+timeout=TIMEOUT, context=SSL_CONTEXT)` under a comment naming this
+fork's commit. **Nothing to defend in a sync any more.** One shape
+difference remains and is sanctioned by the item itself: the
+template's source pin lives in `tests/test_auth_wiring.py`, this
+fork's in
+`tests/test_smoke_live.py::test_post_verifies_certificates_the_same_way_fetch_does`
+— the item's batch-1 correction (2026-08-25) records that home as
+satisfying it, because the pin is not auth-specific.
+
+### 21. SYNC-1.6.44 item 2 — no HeadAsGetMiddleware to retire, and none needed
+
+The item asks every fork to retire `lib/asgi_middleware.HeadAsGetMiddleware`
+or record what it still covers. **There is nothing to retire here**:
+divergence 2 records that the ASGI half of the template is absent, and
+`lib/asgi_middleware.py` does not exist on this fork. Flask answers HEAD by
+running the GET view and discarding the body, so the shim's job is done by
+the framework.
+
+Recorded rather than skipped, because "the file is absent" and "the
+behaviour is absent" are different claims and only the second one matters.
+
+WHICH MECHANISM ANSWERS HEAD HERE (ops' census, 2026-09-05): **Werkzeug's
+automatic HEAD-from-GET, not the package**. The distinction matters because
+dash-improve-my-llms covers HEAD only from 2.9.4, and this fork's floor is
+`>=2.8.0` — so a record that credited the package would be claiming coverage
+this host cannot rely on. Measured against a BARE Flask app with a single
+GET rule and no dimll in the picture at all: GET 200, HEAD 200, empty body.
+The parity is therefore safe across the floor's whole admissible range
+rather than only above 2.9.4, and this fork never carried
+HeadAsGetMiddleware in the first place (the 1.6.32/33 fix was never ported
+here) — an ABSENT mechanism, never a retired one.
+Item 2's acceptance run, against production at 06cc418's parent, GET vs HEAD
+compared on status, content-type and the Link headers:
+
+  /healthz /llms.txt /robots.txt /sitemap.xml /  x  browser / crawler / cli
+  **15/15 pairs matched**, `/` to a browser UA included.
+
+Same result the template reports WITHOUT the middleware. `head_get_parity_three_uas`
+in `scripts/network_smoke.py` (item 5) is where this is re-measured every run;
+this entry is why no shim is expected to be there.
+
+Related, and worth keeping beside it: the ops seat reported `HEAD /` on this
+host timing out at 25 s / 0 bytes twice on 2026-09-03. Not reproduced from
+this seat in fifteen further probes across three sessions (0.17-0.38 s, all
+200). The two seats reach the origin by different paths, so this is recorded
+as unexplained rather than resolved.
 
 ## Byte-owned paths
 
