@@ -375,6 +375,38 @@ they win.
    scope. Enumerate what you cannot do (closing PRs, dashboard
    steps) for the owner instead of claiming it done.
 
+- PRINT THE RESOLVED VERSION BESIDE THE RESULT, and say which tool
+  produced it (1.6.44 item 10). An acceptance is a claim about a tree
+  at a version: "suite green" is not a result, "458 passed, 1 skipped,
+  exit 0, dimll 2.8.0 imported from .venv/.../site-packages" is.
+  Resolve it by IMPORTING and printing `mod.__file__` — never by
+  reading requirements.txt, which states the intent, and never by
+  parsing source. Measured on excalidraw 2026-09-01: `llms_version`
+  2.9.4 on the wire while its suite ran 2.8.0, so its CI and its
+  production disagreed about which package's behaviour was being
+  accepted, and every green tick meant the older one.
+  THIS HOST CANNOT YET MAKE THAT COMPARISON: `/healthz` here carries no
+  `llms_version` until 1.6.44 item 1 is deployed, so the production
+  number is unreadable and the range check over the whole admissible
+  floor stands in for it (DIVERGENCES 20). Say which of the two you
+  are reporting.
+  The same rule names the tools whose LOCAL invocation is not CI's:
+  `actionlint` without shellcheck on PATH skips every `run:` block's
+  shell analysis, so "actionlint clean" locally is a weaker statement
+  than the CI job's; a local absence of the binary is weaker still,
+  and both must be reported as what they are. MEASURED ON THIS SEAT
+  2026-09-05: neither `actionlint` nor `shellcheck` is on PATH here, so
+  this seat can make NO local statement about the lint job at all —
+  only CI's run counts, and a report from here says exactly that.
+  This repo also runs no Python linter in CI (the lint job is
+  actionlint alone; there is no flake8, ruff or lint config anywhere),
+  so `py_compile sweep of docs/` is the only reader of the Python the
+  docs site renders — not a second opinion. Report it as "no linter in
+  CI; py_compile is the syntax gate", never by quoting a flake8 line
+  this repo does not have.
+  The general form: when the check you ran differs from the check CI
+  runs, the report says so in the same sentence as the result.
+
 ### Verification traps (fleet-learned, keep them)
 
 - A `>=` floor can never pull a new release through a Docker cache

@@ -406,3 +406,32 @@ def test_divergences_separates_conventions_from_divergences():
     assert numbers and sorted(numbers) == list(range(1, max(numbers) + 1)), (
         f"a DIVERGENCES entry went missing in the move: {sorted(numbers)}"
     )
+
+
+def test_the_kit_requires_the_resolved_version_beside_the_result():
+    """1.6.44 item 10. An acceptance is a claim about a tree AT A VERSION.
+
+    Whitespace flattened before matching (item 13): these clauses wrap across
+    lines in the kit, and a fragment that spans a newline is invisible to a
+    raw substring check.
+    """
+    body = " ".join((REPO / ".claude" / "CLAUDE.md").read_text().split())
+
+    for clause in (
+        "PRINT THE RESOLVED VERSION BESIDE THE RESULT",
+        "IMPORTING and printing `mod.__file__`",
+        "when the check you ran differs from the check CI runs",
+    ):
+        assert clause.lower() in body.lower(), f"missing from the kit: {clause}"
+
+
+def test_the_kit_records_what_this_seat_cannot_lint():
+    """The half that is this fork's own, not the template's.
+
+    Neither actionlint nor shellcheck is on PATH on this seat, and there is
+    no Python linter in CI at all. Both facts change what a report from here
+    is allowed to claim, so both are written down rather than remembered.
+    """
+    body = " ".join((REPO / ".claude" / "CLAUDE.md").read_text().split())
+    assert "no linter in CI; py_compile is the syntax gate".lower() in body.lower()
+    assert "shellcheck" in body
