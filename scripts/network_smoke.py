@@ -113,6 +113,15 @@ PASS, FAIL, WARN, SKIP = "pass", "FAIL", "warn", "skip"
 _RESULTS: list[tuple[str, str, str]] = []  # (name, verdict, detail)
 
 
+class SmokeSkip(Exception):
+    """This check does not apply to this host.
+
+    A SKIP is a VERDICT, never a pass (note 88): a check that swept nothing
+    and a check that found nothing produce the same green otherwise, and the
+    one that swept nothing is the one nobody notices.
+    """
+
+
 class SmokeFailure(Exception):
     pass
 
@@ -146,6 +155,24 @@ def _ssl_context() -> ssl.SSLContext:
 SSL_CONTEXT = _ssl_context()
 
 
+class _Headers(dict):
+    """Lower-cased response headers that remember repeats.
+
+    ``dict`` semantics are unchanged (last value wins on ``h["link"]``) so
+    every existing caller keeps working; ``get_all()`` returns every value a
+    name arrived with, which is what a multi-valued `Link` needs.
+    """
+
+    def __init__(self, message):
+        self._all: dict = {}
+        for key, value in message.items():
+            self._all.setdefault(key.lower(), []).append(value)
+        super().__init__({k: v[-1] for k, v in self._all.items()})
+
+    def get_all(self, name: str) -> list:
+        return list(self._all.get(name.lower(), []))
+
+
 def fetch(url: str, ua: str = UA, method: str = "GET",
           body: bytes | None = None, headers: dict | None = None,
           timeout: int = TIMEOUT, retries: int = 3):
@@ -155,6 +182,14 @@ def fetch(url: str, ua: str = UA, method: str = "GET",
     Response headers come back lower-cased: gunicorn sends `content-type`,
     proxies often re-case it — callers must not care. (A CI-only failure in
     the network root's battery was exactly that difference.)
+
+    They also come back as a ``_Headers`` mapping that KEEPS REPEATED NAMES
+    (1.6.44 item 5). A plain ``{k: v for k, v in r.headers.items()}`` keeps
+    only the LAST value of a repeated header, which silently drops half of a
+    multi-valued `Link`; and `get_all()` alone is necessary but not
+    sufficient, because a comma-FOLDED single value is equally legal and is
+    what this host serves over HTTP/2. Callers that want every value use
+    ``headers.get_all(name)``; ``headers[name]`` keeps its old meaning.
     """
     last_exc: Exception | None = None
     for attempt in range(retries):
@@ -167,10 +202,10 @@ def fetch(url: str, ua: str = UA, method: str = "GET",
         try:
             with urllib.request.urlopen(
                     req, timeout=timeout, context=SSL_CONTEXT) as r:
-                return (r.status, {k.lower(): v for k, v in r.headers.items()},
+                return (r.status, _Headers(r.headers),
                         r.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as e:
-            return (e.code, {k.lower(): v for k, v in e.headers.items()},
+            return (e.code, _Headers(e.headers),
                     e.read().decode("utf-8", "replace"))
         except Exception as exc:  # timeout, reset, truncated read, …
             last_exc = exc
@@ -188,6 +223,8 @@ def check(name: str, fn) -> None:
     try:
         fn()
         record(name, PASS)
+    except SmokeSkip as exc:
+        record(name, SKIP, str(exc))
     except SmokeFailure as exc:
         record(name, FAIL, str(exc))
     except Exception as exc:  # network/parse error → still a failure
@@ -197,6 +234,11 @@ def check(name: str, fn) -> None:
 def expect(cond: bool, msg: str) -> None:
     if not cond:
         raise SmokeFailure(msg)
+
+
+def skip(msg: str) -> None:
+    """This check does not apply to this host. Never a pass."""
+    raise SmokeSkip(msg)
 
 
 def declared_python_minor():
@@ -380,8 +422,108 @@ def satellite_checks(base: str) -> None:
                    f"no Vary: Accept on the {label} variant — a shared cache "
                    "may serve it to everyone")
 
+    def head_get_parity_three_uas():
+        """HEAD answers wherever GET does, in every lane.
+
+        `/healthz` alone with one UA is not the test: the prerender middleware
+        answers a crawler-UA `HEAD /` before routing, so that one path can
+        return 200 on a host whose every other route 405s. Probe paths that
+        are NOT `/`, with all three UAs.
+
+        This fork has no HeadAsGetMiddleware to lean on (DIVERGENCES 21):
+        Flask answers HEAD by running the GET view and discarding the body,
+        so this check is what says that is still true after a deploy.
+        """
+        paths = ("/healthz", "/llms.txt", "/robots.txt", "/sitemap.xml", "/")
+        agents = (("browser", BROWSER_UA), ("crawler", CRAWLER_UA),
+                  ("engine", "curl/8 " + _INTERNAL_UA))
+        mismatches = []
+        pairs = 0
+        for path in paths:
+            for lane, ua in agents:
+                get_status, _, _ = get(path, ua=ua)
+                head_status, _, _ = get(path, ua=ua, method="HEAD")
+                pairs += 1
+                if head_status != get_status:
+                    mismatches.append(
+                        f"{lane} {path}: HEAD {head_status} vs GET {get_status}"
+                        + (" (no HEAD rule for this GET route)"
+                           if head_status == 405 else ""))
+        expect(pairs == len(paths) * len(agents),
+               f"compared {pairs} pairs, expected {len(paths) * len(agents)}")
+        expect(not mismatches, "; ".join(mismatches))
+
+    def api_llms_rows_present():
+        """A host that declares API_PACKAGES serves a non-empty /api index.
+
+        SKIPPED, never passed, where API_PACKAGES is empty. This fork
+        declares one package, so the skip branch is not this host's state —
+        which is exactly why the mutation is pinned in
+        tests/test_network_smoke.py rather than trusted here.
+        """
+        try:
+            from lib.constants import API_PACKAGES
+        except Exception:
+            skip("no checkout beside this script — API_PACKAGES unreadable")
+        if not API_PACKAGES:
+            skip("API_PACKAGES is empty on this host — nothing to index")
+        status, _, text = get("/api/llms.txt")
+        expect(status == 200, f"/api/llms.txt {status} while API_PACKAGES "
+                              f"declares {len(API_PACKAGES)} package(s)")
+        rows = [ln for ln in text.splitlines() if ln.strip().startswith("- ")]
+        expect(len(rows) > 0,
+               f"/api/llms.txt lists 0 entries for {list(API_PACKAGES)}")
+
+    def discovery_link_headers_per_lane():
+        """Both lanes advertise the same discovery relations.
+
+        Read every `Link` value, not `headers['link']`: repeated headers keep
+        only the last through a plain dict, and a folded comma-joined value is
+        equally legal — MEASURED on this host, both relations arrive folded
+        into one header over HTTP/2. So parse the relations out of everything
+        that came back rather than counting headers.
+        """
+        wanted = {"alternate", "describedby"}
+        for lane, ua in (("browser", BROWSER_UA), ("crawler", CRAWLER_UA)):
+            status, headers, _ = get("/", ua=ua)
+            expect(status == 200, f"{lane} GET / {status}")
+            values = headers.get_all("link")
+            rels = set(re.findall(r'rel="?([a-zA-Z-]+)"?', ", ".join(values)))
+            expect(wanted <= rels,
+                   f"{lane} lane advertises {sorted(rels) or 'no Link header'}"
+                   f" — missing {sorted(wanted - rels)}")
+            expect(all("/llms.txt" in v for v in values),
+                   f"{lane} lane's Link headers do not point at /llms.txt: "
+                   f"{values}")
+
+    def directory_counts_are_derived():
+        """The Network section lists exactly the peers the module names.
+
+        Counts come from `lib/network_directory`, never a literal: a hard
+        number in a battery is a check that stops testing the moment the
+        fleet grows, and passes while doing it.
+        """
+        try:
+            from lib.constants import BASE_URL
+            from lib.network_directory import peers_for
+        except Exception:
+            skip("no checkout beside this script — the directory is unreadable")
+        expected = {p["url"].rstrip("/") for p in peers_for(BASE_URL)}
+        expect(len(expected) > 0,
+               "peers_for() names no peers — nothing to hold the wire to")
+        _status, _, text = get("/llms.txt")
+        section = text.split("## Network", 1)[-1]
+        missing = sorted(u for u in expected if u.rstrip("/") not in section)
+        expect(not missing,
+               f"{len(missing)} of {len(expected)} peers absent from the "
+               f"/llms.txt Network section: {missing[:3]}")
+
     for name, fn in (
         ("healthz_ok", healthz_ok),
+        ("head_get_parity_three_uas", head_get_parity_three_uas),
+        ("api_llms_rows_present", api_llms_rows_present),
+        ("discovery_link_headers_per_lane", discovery_link_headers_per_lane),
+        ("directory_counts_are_derived", directory_counts_are_derived),
         ("python_matches_declared", python_matches_declared),
         ("llms_txt_identity", llms_txt_identity),
         ("llms_txt_names_the_hub", llms_txt_names_the_hub),

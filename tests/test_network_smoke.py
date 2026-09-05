@@ -47,20 +47,35 @@ def wired(battery, client, monkeypatch):
     """Point the battery's `fetch` at the test client.
 
     The signature is `fetch(url, ua=..., method=..., body=..., headers=...)`
-    and it returns `(status, lowercased_headers, text)`. Only GET is used by
-    the satellite battery, so a non-GET here is a bug in the script rather
-    than something to emulate.
+    and it returns `(status, headers, text)`.
+
+    HEAD is emulated (1.6.44 item 5): `head_get_parity_three_uas` compares the
+    two methods, so a harness that refused HEAD would make the parity check
+    unrunnable in process. Werkzeug answers HEAD through the same view and
+    discards the body, which is the behaviour under test.
+
+    Headers come back through the battery's own `_Headers` mapping rather than
+    a plain dict, so `get_all()` exists here exactly as it does on the wire —
+    a stub that flattened them would hide the multi-valued `Link` this fork
+    actually serves folded.
     """
     seen_agents = []
 
     def fetch(url, ua=battery.UA, method="GET", body=None, headers=None,
               timeout=None, retries=1):
-        assert method == "GET", f"the satellite battery issued a {method}"
+        assert method in ("GET", "HEAD"), (
+            f"the satellite battery issued a {method}")
         seen_agents.append(ua)
         path = url[len(BASE):] if url.startswith(BASE) else url
         accept = (headers or {}).get("Accept")
+        if method == "HEAD":
+            raw = client._raw.head(
+                path or "/",
+                headers={"User-Agent": ua,
+                         **({"Accept": accept} if accept else {})})
+            return raw.status_code, battery._Headers(raw.headers), ""
         response = client.get(path or "/", user_agent=ua, accept=accept)
-        return response.status, dict(response.headers), response.text
+        return response.status, battery._Headers(response.headers), response.text
 
     monkeypatch.setattr(battery, "fetch", fetch)
     monkeypatch.setattr(battery, "_RESULTS", [])
@@ -171,3 +186,79 @@ def test_a_host_with_no_python_field_fails_the_battery(wired, monkeypatch):
               if verdict == wired.FAIL}
     assert "python_matches_declared" in failed, wired._RESULTS
     assert "no `python` field" in failed["python_matches_declared"]
+
+
+# ------------------------------------------------- skip is a verdict, not a --
+#                                                    pass (1.6.44 item 5)
+
+
+def test_the_four_new_invariants_are_registered_by_name(wired):
+    """Registered BY NAME, so a rename cannot quietly retire one."""
+    wired.satellite_checks(BASE)
+    names = {name for name, _verdict, _detail in wired._RESULTS}
+    for required in ("head_get_parity_three_uas", "api_llms_rows_present",
+                     "discovery_link_headers_per_lane",
+                     "directory_counts_are_derived"):
+        assert required in names, f"{required} did not run: {sorted(names)}"
+
+
+def test_an_empty_api_packages_SKIPS_rather_than_passing(wired, monkeypatch):
+    """THE MUTATION. A pass on an absent precondition is note 88's defect.
+
+    This fork declares one API package, so the skip branch is not the state
+    this host runs in — which is precisely why it has to be exercised
+    deliberately. Without this, `api_llms_rows_present` would read green on a
+    host that indexes nothing, and nobody would learn the difference between
+    "the index is right" and "there was no index to check".
+    """
+    import lib.constants as constants
+
+    monkeypatch.setattr(constants, "API_PACKAGES", [])
+    monkeypatch.setattr(wired, "_RESULTS", [])
+    wired.satellite_checks(BASE)
+
+    verdicts = {name: verdict for name, verdict, _ in wired._RESULTS}
+    assert verdicts.get("api_llms_rows_present") == wired.SKIP, (
+        f"empty API_PACKAGES did not SKIP: {verdicts.get('api_llms_rows_present')!r}"
+    )
+
+
+def test_the_populated_case_really_passes_so_the_skip_means_something(wired):
+    """The other half of the mutation: with packages declared it must PASS.
+
+    A check that skipped in both directions would satisfy the test above
+    while testing nothing.
+    """
+    from lib.constants import API_PACKAGES
+
+    assert API_PACKAGES, "this fork is expected to declare an API package"
+    wired.satellite_checks(BASE)
+    verdicts = {name: verdict for name, verdict, _ in wired._RESULTS}
+    assert verdicts.get("api_llms_rows_present") == wired.PASS, wired._RESULTS
+
+
+def test_link_headers_survive_folding_and_repetition(battery):
+    """The header mapping keeps repeats AND parses folded values.
+
+    Both shapes are legal and this host serves the folded one, so a check
+    that counted headers rather than parsing relations would pass here and
+    fail on a peer for no reason anyone could see.
+    """
+    import email.message
+
+    folded = email.message.Message()
+    folded["Link"] = '</llms.txt>; rel="alternate", </llms.txt>; rel="describedby"'
+    repeated = email.message.Message()
+    repeated["Link"] = '</llms.txt>; rel="alternate"'
+    repeated["Link"] = '</llms.txt>; rel="describedby"'
+
+    import re
+
+    for label, message, n in (("folded", folded, 1), ("repeated", repeated, 2)):
+        headers = battery._Headers(message)
+        values = headers.get_all("link")
+        assert len(values) == n, f"{label}: {values}"
+        rels = set(re.findall(r'rel="?([a-zA-Z-]+)"?', ", ".join(values)))
+        assert rels == {"alternate", "describedby"}, f"{label}: {rels}"
+        # dict semantics unchanged for every existing caller
+        assert headers["link"] == values[-1]
