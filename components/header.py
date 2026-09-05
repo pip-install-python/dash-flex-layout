@@ -123,7 +123,11 @@ def create_other_apps_menu():
                 }},
             ),
         ],
-        trigger="hover",
+        # `trigger="hover"` made the ONLY listing of the network pointer-only:
+        # focus the button, press Enter, nothing happens — and on a touch
+        # screen there is no hover at all. "click-hover" keeps the pointer
+        # affordance and adds the keyboard and touch one (1.6.44 item 6a).
+        trigger="click-hover",
         openDelay=100,
         closeDelay=200,
     )

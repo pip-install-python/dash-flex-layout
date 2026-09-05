@@ -394,6 +394,26 @@ def _track_visitor():
         pass
 
 
+@app.server.after_request
+def _asset_cache_lifetime(response):
+    """Give /assets/ a lifetime (1.6.44 item 6g). See lib/static_cache.
+
+    Measured on this host's wire before the change: every file under
+    /assets/ answered `cache-control: no-cache` + `cf-cache-status: DYNAMIC`,
+    so the edge stored nothing and the origin served the stylesheet on every
+    page load. Only unfingerprinted assets get a lifetime — documents keep
+    revalidating, because they are answers about right now.
+    """
+    from flask import request
+
+    from lib.static_cache import cache_control_for
+
+    value = cache_control_for(request.path)
+    if value and response.status_code == 200:
+        response.headers["Cache-Control"] = value
+    return response
+
+
 # ============================================================================
 # Access control (dash-improve-my-llms 2.3+). Reads the tiers the pages just
 # declared, so it must run after they are registered and before the routes are

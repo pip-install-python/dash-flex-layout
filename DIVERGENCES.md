@@ -576,6 +576,64 @@ this seat in fifteen further probes across three sessions (0.17-0.38 s, all
 200). The two seats reach the origin by different paths, so this is recorded
 as unexplained rather than resolved.
 
+### 22. SYNC-1.6.44 item 6 — three sub-items recorded, not fixed
+
+(a), (b), (c) and (g) are applied and asserted in `tests/test_a11y_block.py`.
+The other three are recorded here because a sub-item that quietly leaves a
+checklist cannot be told from one that was done.
+
+**(d) the mobile console error — NOT ASSESSED, and that is not the same as
+not reproduced.** The item asks for a seat visual pass at desktop and phone
+width. The seat that built this round has no browser attached, so it can
+honestly say neither "reproduced" nor "not reproduced". OPEN. The structural
+half — that the controls a phone reader touches are real buttons and meet
+44px — is asserted; the rendered-console half is not.
+
+**(e) shipped CSS/JS are NOT minified, deliberately.** MEASURED on this
+host's wire 2026-09-05: `/assets/main.css` answers `content-encoding: gzip`.
+The whole of `assets/*.css` + `assets/*.js` is 34,235 bytes of text which
+gzips to 10,337. Minification would save a fraction of that after gzip, and
+an unminified stylesheet is the one a fork reads when it forks this repo.
+Recorded, not deferred.
+
+**(f) the intrinsic-size machinery is NOT ported: this fork ships ZERO
+content images.** `_intrinsic_size` / `_size_from_header` exist on the
+template so a content image reserves its box and the prose beneath it does
+not jump. There is no such image in `docs/**/*.md` or `pages/*.md` here, so
+the machinery would be dead code AND the template's own non-vacuity test
+("no content images anywhere — (f) swept nothing") would fail on this tree.
+What IS ported is the pin that Dash still rejects `loading=` / `decoding=`
+— that guards a future edit rather than a current corpus — plus a TRIPWIRE
+(`test_the_content_image_corpus_is_still_empty`) that goes red the day an
+image appears and names the item to port.
+
+**The preconnect budget check is not applicable here.** The template's
+`templates/index.html` carries preconnects for its font host; this fork's
+index declares only what Dash omits (og auxiliaries, manifest, icons) and
+carries NO preconnect and no external font — so there is no budget to keep
+and nothing to assert. Recorded so the absence is not read as a dropped
+check.
+
+### 23. SYNC-1.6.44 item 6g — measured before and after
+
+Before, on the wire: `/assets/main.css` -> `cache-control: no-cache`,
+`cf-cache-status: DYNAMIC`. The edge stored nothing and the origin answered
+every request for the stylesheet.
+
+After (local, through the real app): `/assets/main.css` ->
+`public, max-age=3600, stale-while-revalidate=86400`; `/`, `/basic`,
+`/llms.txt`, `/healthz` -> no Cache-Control at all. Documents keep
+revalidating; only unfingerprinted assets get a lifetime. Dash's own
+`/_dash-component-suites/` URLs are left alone — they are fingerprinted and
+the package already sets a long immutable lifetime.
+
+One lane to wire, not two: this fork is Flask-only (divergence 2), so there
+is no `lib/asgi_middleware.py` to keep in step and the template's
+"both lanes from one place" test collapses to one lane. The policy still
+lives in `lib/static_cache.py` rather than inline at the seam.
+
+The wire half of this acceptance is unverified until the stack is pushed.
+
 ## Byte-owned paths
 
 Paths this fork owns byte-for-byte. The F3b fan-out never overwrites
