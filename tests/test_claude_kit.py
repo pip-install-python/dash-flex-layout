@@ -435,3 +435,58 @@ def test_the_kit_records_what_this_seat_cannot_lint():
     body = " ".join((REPO / ".claude" / "CLAUDE.md").read_text().split())
     assert "no linter in CI; py_compile is the syntax gate".lower() in body.lower()
     assert "shellcheck" in body
+
+
+def test_kit_traps_reports_the_pair_and_a_third_verdict():
+    """1.6.44 item 14. The gap must be PRINTABLE, not remembered.
+
+    Also pins the third verdict: a near miss is a fork's own wording, never
+    an absence. A tool that called those missing would train this repo to
+    paste over its adaptations, which is the opposite of the item.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO / "scripts"))
+    import kit_traps
+
+    fork = (REPO / ".claude" / "CLAUDE.md").read_text()
+    fork_n, template_n, missing, near = kit_traps.compare(fork, fork)
+
+    assert fork_n >= 20, f"only {fork_n} trap entries parsed from this kit"
+    assert (fork_n, template_n) == (fork_n, fork_n)
+    assert missing == [] and near == [], (
+        "a kit compared against ITSELF reported a gap — the matcher is broken"
+    )
+
+
+def test_the_matcher_is_asymmetric_on_purpose():
+    """The fork answers from its WHOLE entry, the template from its opening.
+
+    Measured here: matching sentence-to-sentence scored a trap this fork
+    genuinely carries at 0.48, because the template's opening sentence had
+    grown four clauses of provenance since. Every clause the template adds
+    would otherwise raise the bar a fork must clear with wording it merged
+    months earlier.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO / "scripts"))
+    import kit_traps
+
+    entry = "- A trap about widgets. Later provenance sentence, added 2026."
+    first_only = kit_traps._tokens(entry)
+    whole = kit_traps._tokens(entry, whole=True)
+    assert whole > first_only, "the whole-entry read is not wider"
+    assert "provenance" in whole and "provenance" not in first_only
+
+
+def test_no_trap_contradicts_the_release_branch_one():
+    """The clerkhook lesson, applied to this file: when a trap is corrected,
+    AMEND THE ORIGINAL. An unqualified `build == HEAD` sitting above the
+    corrected one sends a reader to the wrong ref."""
+    body = " ".join((REPO / ".claude" / "CLAUDE.md").read_text().split())
+    assert "build == HEAD **of `release`** is the deploy proof" in body
+    assert "`/healthz` build == HEAD is the deploy proof" not in body, (
+        "the unqualified form is back — a reader meeting it first compares "
+        "the wire against origin/main and reads a pending push as drift"
+    )

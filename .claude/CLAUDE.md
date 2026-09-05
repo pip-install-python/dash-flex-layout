@@ -375,48 +375,40 @@ they win.
    scope. Enumerate what you cannot do (closing PRs, dashboard
    steps) for the owner instead of claiming it done.
 
-- PRINT THE RESOLVED VERSION BESIDE THE RESULT, and say which tool
-  produced it (1.6.44 item 10). An acceptance is a claim about a tree
-  at a version: "suite green" is not a result, "458 passed, 1 skipped,
-  exit 0, dimll 2.8.0 imported from .venv/.../site-packages" is.
-  Resolve it by IMPORTING and printing `mod.__file__` — never by
-  reading requirements.txt, which states the intent, and never by
-  parsing source. Measured on excalidraw 2026-09-01: `llms_version`
-  2.9.4 on the wire while its suite ran 2.8.0, so its CI and its
-  production disagreed about which package's behaviour was being
-  accepted, and every green tick meant the older one.
-  THIS HOST CANNOT YET MAKE THAT COMPARISON: `/healthz` here carries no
-  `llms_version` until 1.6.44 item 1 is deployed, so the production
-  number is unreadable and the range check over the whole admissible
-  floor stands in for it (DIVERGENCES 20). Say which of the two you
-  are reporting.
-  The same rule names the tools whose LOCAL invocation is not CI's:
-  `actionlint` without shellcheck on PATH skips every `run:` block's
-  shell analysis, so "actionlint clean" locally is a weaker statement
-  than the CI job's; a local absence of the binary is weaker still,
-  and both must be reported as what they are. MEASURED ON THIS SEAT
-  2026-09-05: neither `actionlint` nor `shellcheck` is on PATH here, so
-  this seat can make NO local statement about the lint job at all —
-  only CI's run counts, and a report from here says exactly that.
-  This repo also runs no Python linter in CI (the lint job is
-  actionlint alone; there is no flake8, ruff or lint config anywhere),
-  so `py_compile sweep of docs/` is the only reader of the Python the
-  docs site renders — not a second opinion. Report it as "no linter in
-  CI; py_compile is the syntax gate", never by quoting a flake8 line
-  this repo does not have.
-  The general form: when the check you ran differs from the check CI
-  runs, the report says so in the same sentence as the result.
-
 ### Verification traps (fleet-learned, keep them)
 
 - A `>=` floor can never pull a new release through a Docker cache
   hit — the requirements line changing IS the cache bust, and floors
   live in several encodings (requirements, run.py's boot floor,
   tests, CI): grep the number, move every one.
-- `/healthz` build == HEAD is the deploy proof; a missing geo block
-  on dimll ≥2.7 means the cache trap fired (unless DIVERGENCES.md
-  says this host's healthz is deliberately minimal).
-- Probe with GET, not HEAD — HEAD responses omit the Link headers.
+- `/healthz` build == HEAD **of `release`** is the deploy proof on a
+  release-branch host — see the fuller trap further down and read that
+  one before acting on this line. Written unqualified here until
+  2026-09-05, when the kit-traps sweep found the two lines
+  contradicting each other in this very file: a reader who met this
+  one first was sent to the wrong ref, and `main` ahead of `release`
+  reads as drift instead of what it is (an uncertified push pending).
+  A missing geo block on dimll ≥2.7 means the cache trap fired (unless
+  DIVERGENCES.md says this host's healthz is deliberately minimal).
+  The general form, since this file is long enough to contain its own
+  contradictions: when a trap is later corrected, AMEND THE ORIGINAL —
+  a correction that only appends leaves the wrong answer in the place
+  a reader looks first.
+- Always GET, never HEAD — and know the mechanism, because it is
+  backend-shaped. Werkzeug derives a HEAD rule from every GET rule;
+  FastAPI's `APIRoute` does not, so on the fleet's ASGI hosts a route
+  declared `@router.get(...)` returned 405 for HEAD — `/healthz`,
+  `/robots.txt`, `/sitemap.xml` included. Get the LAYER right:
+  `starlette.routing.Route` DOES add HEAD wherever GET is present; it
+  is FastAPI's `APIRoute` that takes `methods` literally.
+  THIS HOST IS FLASK, so Werkzeug's courtesy applies and HEAD answers
+  everywhere — MEASURED 2026-09-05 against a bare Flask app with one
+  GET rule (GET 200, HEAD 200, empty body) and against production
+  (15/15 GET/HEAD pairs across five paths and three UAs). That is why
+  DIVERGENCES 21 credits Werkzeug and not the package. The advice
+  still stands: a HEAD probe tells you about the router's method
+  table and never about the document, and HEAD responses omit the
+  Link headers.
 - Run-watchers keyed on a commit sha can match Dependabot's runs on
   the same sha — key on the workflow path (cd.yml) instead.
 - The browser lane and the machine lane are different documents;
@@ -474,3 +466,132 @@ they win.
   never through a pipe. And grep a fragment as it SHIPS, not
   as your prose styles it — prefer `-ci` for any fragment
   whose case is an emphasis choice rather than an identifier.
+- Any throwaway Python probe a session writes against a production
+  host needs the certifi SSL context AND a retry guard. Fixing the
+  shipped tools does not cover the next ad-hoc script: the template
+  seat hit `CERTIFICATE_VERIFY_FAILED` in a hand-written CD watcher
+  an hour after shipping that exact fix inside both live tools. It is
+  a seat habit, not a repo contract, which is what this file is for.
+  (On this seat `pip` cannot reach PyPI at all through the sandbox
+  proxy — SSLCertVerificationError — while `curl` can; fetch wheels
+  with curl and import them, rather than concluding the network is
+  down.)
+- SUPERSESSION: a build-match wait cannot tell "not deployed yet"
+  from "already replaced" — both look like a live build that is not
+  the sha it wants. A bot-merged PR lands with ZERO workflow runs on
+  the merge sha (anti-recursion) yet still reaches production, so an
+  in-flight CD run ships the merge while its own wait holds out for
+  the superseded sha. Two human pushes inside one deploy window do
+  the same. Fail FAST when the live build is a DESCENDANT of the
+  wanted sha rather than going red at timeout.
+- Anonymous api.github.com is 60 requests/HOUR. With no `gh` and no
+  token, read a run ONCE after CI's own jobs report complete — a
+  blind 20 s poll loop spends the whole budget reading rate-limit
+  bodies as "not done yet". `gh` is NOT installed on this seat, so
+  the API is the only road and the budget is the real constraint;
+  poll `/healthz` and `git ls-remote`, which cost nothing.
+- A GitHub API JSON body WITHOUT the field you asked for
+  (`workflow_runs` absent, not empty) is a rate-limit error body,
+  never an empty result — check the field exists before trusting the
+  answer.
+- A failed STEP is not a failed RUN. A job with
+  `continue-on-error: true` reports its step red and the RUN still
+  concludes `success`; the reverse also bites — a green-looking job
+  list under a run whose conclusion is `failure`. Read the run's
+  `conclusion`, then the annotations; never infer either from the
+  other.
+- Never round-trip JSON through zsh `echo` — it interprets the `\n`
+  inside a multi-line commit message and hands the parser real
+  control characters. Pipe curl straight into `python3`, or use
+  `printf '%s'`.
+- Repeated HTTP headers survive only if you keep them: both
+  `dict(resp.headers)` and `{k: v for k, v in resp.headers.items()}`
+  keep the LAST value per name, and dimll emits several `Link`
+  headers. Iterate the items, or ask for `resp.headers.get_all(name)`;
+  in curl, `-D -` and read the raw block. AND `get_all()` is
+  necessary but NOT sufficient — MEASURED on this host 2026-09-05,
+  flexlayout serves both discovery relations comma-FOLDED into ONE
+  header over HTTP/2, so `get_all()` returns a single string and a
+  check that counted headers would pass here and fail on a peer for
+  no visible reason. Parse the relations out of the values.
+- Name the crawler UA when you probe the machine lane. Which document
+  a host serves is decided by the package's UA classification, not by
+  the absence of a UA: a UA-less or library client is crawler-lane
+  from dimll 2.8. Send `-A "<a real crawler UA>"` and confirm from
+  the BODY which document came back. And never probe production with
+  a bare vendor UA — that writes an unverified vendor row into the
+  ledger; the convention is vendor token + `2plot-internal/probe`.
+- Headless browsers are CRAWLER-lane from dash-improve-my-llms 2.9.0
+  (`HeadlessChrome/…` and Playwright classify `lane: crawler,
+  bot_type: monitor, vendor_key: headless`; 2.8.0 said browser). A
+  host that screenshots ITSELF for social cards now receives the
+  crawler document, not the app shell. If a card went blank or
+  textual after a floor bump, look here before the template.
+- When you parse a language construct out of source with a regex,
+  check the count against something independent before you believe a
+  negative: `re.search(r"EVENT_FIELDS = \((.*?)\)", src, re.S)`
+  truncated at a `)` inside a COMMENT, printed eight of sixteen
+  fields, and reported `'ua' present: False` — confidently, with a
+  number beside it. Import the thing and print `len()`.
+- A shell's CWD can shadow an installed package, and it produces the
+  most convincing wrong answer of the family: comparing
+  `EVENT_FIELDS` across dimll versions with the cwd inside an
+  unpacked wheel makes `import dash_improve_my_llms` resolve from the
+  CURRENT DIRECTORY, so two readings of ONE wheel get reported as two
+  versions agreeing. `print(mod.__file__)` and assert it is the path
+  you meant, or set PYTHONPATH explicitly and import in a fresh
+  process per version; and print the unpacked file count before the
+  read.
+- NAME THE CHECK THAT ACTUALLY RAN, not the one you meant to run.
+  On the template `.flake8` excludes `docs/*/`, so "flake8 is clean"
+  was reported for a year as covering the examples a documentation
+  site RENDERS, and it never read one. ON THIS FORK IT IS WORSE AND
+  SIMPLER: there is no Python linter in CI at all — the lint job is
+  actionlint alone, and there is no flake8, ruff or lint config
+  anywhere in the tree. So `py_compile sweep of docs/` is the ONLY
+  reader of that Python, not a second opinion, and a report from here
+  says "no linter in CI; py_compile is the syntax gate" rather than
+  quoting a flake8 line this repo does not have. A report names which
+  invocation produced the number, over how many files, and with what
+  exit code.
+- A FORK'S TRAPS SECTION DRIFTS BEHIND THE TEMPLATE'S SILENTLY,
+  because the kit is contract-class and no sync copies it. Run
+  `python3 scripts/kit_traps.py <template>/.claude/CLAUDE.md` to
+  print `fork N / template M` and the titles missing. Match by TOKEN
+  OVERLAP of the opening sentence against the fork's WHOLE entry, not
+  sentence-to-sentence: measured here 2026-09-05, a trap this fork
+  genuinely carried scored 0.48 against a template sentence that had
+  since grown four clauses, and was reported missing. A strict check
+  trains a fork to paste over its own adaptations, which is the
+  opposite of the point.
+- PRINT THE RESOLVED VERSION BESIDE THE RESULT, and say which tool
+  produced it (1.6.44 item 10). An acceptance is a claim about a tree
+  at a version: "suite green" is not a result, "458 passed, 1 skipped,
+  exit 0, dimll 2.8.0 imported from .venv/.../site-packages" is.
+  Resolve it by IMPORTING and printing `mod.__file__` — never by
+  reading requirements.txt, which states the intent, and never by
+  parsing source. Measured on excalidraw 2026-09-01: `llms_version`
+  2.9.4 on the wire while its suite ran 2.8.0, so its CI and its
+  production disagreed about which package's behaviour was being
+  accepted, and every green tick meant the older one.
+  THIS HOST CANNOT YET MAKE THAT COMPARISON: `/healthz` here carries no
+  `llms_version` until 1.6.44 item 1 is deployed, so the production
+  number is unreadable and the range check over the whole admissible
+  floor stands in for it (DIVERGENCES 20). Say which of the two you
+  are reporting.
+  The same rule names the tools whose LOCAL invocation is not CI's:
+  `actionlint` without shellcheck on PATH skips every `run:` block's
+  shell analysis, so "actionlint clean" locally is a weaker statement
+  than the CI job's; a local absence of the binary is weaker still,
+  and both must be reported as what they are. MEASURED ON THIS SEAT
+  2026-09-05: neither `actionlint` nor `shellcheck` is on PATH here, so
+  this seat can make NO local statement about the lint job at all —
+  only CI's run counts, and a report from here says exactly that.
+  This repo also runs no Python linter in CI (the lint job is
+  actionlint alone; there is no flake8, ruff or lint config anywhere),
+  so `py_compile sweep of docs/` is the only reader of the Python the
+  docs site renders — not a second opinion. Report it as "no linter in
+  CI; py_compile is the syntax gate", never by quoting a flake8 line
+  this repo does not have.
+  The general form: when the check you ran differs from the check CI
+  runs, the report says so in the same sentence as the result.
