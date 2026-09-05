@@ -55,6 +55,27 @@ jobs:
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
 
+      # THE SYNTAX GATE FOR docs/ (1.6.44 item 7). This repo runs no Python
+      # linter in CI at all — the lint job is actionlint alone — so without
+      # this step nothing reads the Python that the documentation site
+      # actually renders. On the template the equivalent gap was a `.flake8`
+      # that excluded `docs/*/`; here there is no linter to exclude anything,
+      # which makes the sweep the only reader rather than a second opinion.
+      #
+      # The count is printed and asserted non-empty on purpose: a sweep that
+      # found nothing and a sweep that swept nothing produce the same green,
+      # and only one of them is evidence.
+      - name: py_compile sweep of docs/
+        run: |
+          count="$(find docs -name '*.py' | wc -l | tr -d ' ')"
+          echo "sweeping $count Python file(s) under docs/"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::the docs/ sweep found no Python files — it is testing nothing"
+            exit 1
+          fi
+          find docs -name '*.py' -print0 | xargs -0 python3 -m py_compile
+          echo "py_compile clean over $count file(s)"
+
   site-tests:
     name: docs site · pytest + battery (zero secrets)
     runs-on: ubuntu-latest
