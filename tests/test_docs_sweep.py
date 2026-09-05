@@ -16,6 +16,8 @@ import py_compile
 import subprocess
 import sys
 
+import pytest
+
 from conftest import REPO_ROOT
 
 CI = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
@@ -112,7 +114,23 @@ def test_the_sweep_command_itself_would_fail_on_that_file():
 
     A step that swept the file but swallowed the exit code would still be
     green, which is the family this whole item belongs to.
+
+    TWO GUARDS, both added after ops' 2026-09-05 sweep for tests that shell
+    out to tools CI's test job may not install:
+
+    * the tools this shape needs are checked for FIRST and the test SKIPS
+      with the reason if any is missing — never passes;
+    * a non-zero exit is not enough. If `python3` were absent, `xargs` would
+      fail for that reason and a bare `returncode != 0` would go green
+      having measured nothing. The assertion is on the SyntaxError.
     """
+    import shutil
+
+    for tool in ("bash", "find", "xargs", "python3"):
+        if shutil.which(tool) is None:
+            pytest.skip(f"{tool} is not on PATH here — CI's runner has it; "
+                        "this shape cannot be measured on this machine")
+
     probe = REPO_ROOT / "docs" / "_sweep_probe_tmp.py"
     probe.write_text("def broken(:\n    pass\n")
     try:
@@ -130,6 +148,11 @@ def test_the_sweep_command_itself_would_fail_on_that_file():
     assert swept.returncode != 0, (
         "the sweep command exited 0 with a syntactically broken file in "
         "docs/ — the pipe is swallowing the failure"
+    )
+    assert "SyntaxError" in (swept.stderr + swept.stdout), (
+        "the sweep failed, but not because of the broken file — a missing "
+        "tool would fail the same way and this test would be green for the "
+        f"wrong reason. Got: {(swept.stderr or swept.stdout)[:200]!r}"
     )
 
 
