@@ -52,9 +52,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Chrome tokens are still there, so the target exercises exactly the path
 # being tested — it just knows the caller is machinery.
 try:
-    from lib.constants import INTERNAL_UA as _INTERNAL_UA
+    from lib.constants import PROBE_UA_SUFFIX as _INTERNAL_UA
 except Exception:  # pragma: no cover — running outside a repo checkout
-    _INTERNAL_UA = "2plot-internal/1.0 (+https://2plot.ai/docs/satellite-analytics)"
+    _INTERNAL_UA = "2plot-internal/probe"
 
 CRAWLER_UA = (
     "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html) "

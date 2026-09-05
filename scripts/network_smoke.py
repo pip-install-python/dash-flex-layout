@@ -50,9 +50,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 TIMEOUT = 30
 try:
-    from lib.constants import INTERNAL_UA as _INTERNAL_UA
+    from lib.constants import PROBE_UA_SUFFIX as _INTERNAL_UA
 except Exception:  # running outside a repo checkout — keep the token intact
-    _INTERNAL_UA = "2plot-internal/1.0 (+https://2plot.ai/docs/satellite-analytics)"
+    _INTERNAL_UA = "2plot-internal/probe"
 # Item 17 (2026-08-30): the bare internal token, with no browser engine
 # token, landed on the CRAWLER lane at dimll >=2.8 (a User-Agent with no
 # `Mozilla/...AppleWebKit/...` engine token is crawler-lane by default —

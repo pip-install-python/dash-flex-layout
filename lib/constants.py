@@ -175,6 +175,42 @@ SAME_AS = [
 INTERNAL_UA_TOKEN = "2plot-internal"
 INTERNAL_UA = "2plot-internal/1.0 (+https://2plot.ai/docs/satellite-analytics)"
 
+# The FLEET PROBE spelling (1.6.44 item 4). Every file that fetches a host —
+# workflows, batteries, link audits — sends an ENGINE token followed by this
+# suffix, so the far side can read "2plot machinery, and which engine it was
+# pretending to be". Suppression is still the tracker's job, not the UA's:
+# the suffix carries INTERNAL_UA_TOKEN, so the write-time drop applies
+# unchanged. What the `/probe` spelling adds is legibility on the far side's
+# log, not a second mechanism.
+PROBE_UA_SUFFIX = f"{INTERNAL_UA_TOKEN}/probe"
+
+
+def probe_ua(engine: str, caller: str = "") -> str:
+    """A fleet probe UA: ``engine`` token, ``PROBE_UA_SUFFIX``, then ``caller``.
+
+    ``engine`` is required and must be a real vendor-or-engine token; a probe
+    with no engine token is classified crawler-lane at dimll >= 2.8 whatever
+    it meant, which silently swaps the document under a browser-lane check.
+
+    ``caller`` names which probe this is — ``"network-smoke"``,
+    ``"link-audit"`` — for whoever reads the far side's log, exactly as
+    ``internal_ua()``'s suffix does. It is not part of the contract: only the
+    token is. Measured on this fork's resolved package, a caller tag moves
+    neither lane nor vendor on any of the three engines
+    (``tests/test_internal_traffic.py`` re-measures it rather than asserting
+    the claim).
+    """
+    engine = (engine or "").strip()
+    if not engine:
+        raise ValueError(
+            "probe_ua() needs a vendor-or-engine token: a UA carrying only "
+            "the internal suffix classifies crawler-lane and changes which "
+            "document the probe is answered with"
+        )
+    caller = (caller or "").strip()
+    ua = f"{engine} {PROBE_UA_SUFFIX}"
+    return f"{ua} {caller}" if caller else ua
+
 
 def internal_ua(caller: str = "") -> str:
     """``INTERNAL_UA`` with a caller suffix, e.g. ``"ad-client"``.

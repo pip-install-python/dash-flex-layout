@@ -133,7 +133,7 @@ jobs:
           matched=0
           ok=0
           for _ in $(seq 1 100); do
-            body="$(curl -fsS "$SITE_URL/healthz" 2>/dev/null || true)"
+            body="$(curl -fsS -A "curl/8 2plot-internal/probe cd-verify" "$SITE_URL/healthz" 2>/dev/null || true)"
             if [ -n "$body" ]; then
               build="$(printf '%s' "$body" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("build",""))' 2>/dev/null || true)"
               if [ "$build" = "$want" ]; then
@@ -180,7 +180,7 @@ jobs:
         # workflow_dispatch against another host (its shas are not ours).
         if: github.event_name == 'push' || inputs.target_url == ''
         run: |
-          build="$(curl -fsS "$SITE_URL/healthz" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("build",""))')"
+          build="$(curl -fsS -A "curl/8 2plot-internal/probe cd-verify" "$SITE_URL/healthz" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("build",""))')"
           if [ "$build" != "$GITHUB_SHA" ]; then
             echo "::error::verify refuses: $SITE_URL serves build '${build:-<none>}', this run is $GITHUB_SHA — nothing this run shipped is on the wire to verify"
             exit 1

@@ -124,14 +124,14 @@ jobs:
         run: |
           gunicorn run:server -b 127.0.0.1:8055 --daemon --access-logfile - --error-logfile -
           for _ in $(seq 1 30); do
-            curl -sf http://127.0.0.1:8055/healthz && break
+            curl -sf -A "curl/8 2plot-internal/probe ci-boot" http://127.0.0.1:8055/healthz && break
             sleep 1
           done
           # A page that renders under the test client can still fail under a
           # real WSGI worker — different import path, different working
           # directory, no test-client conveniences.
-          curl -sf http://127.0.0.1:8055/ > /dev/null
-          curl -sf http://127.0.0.1:8055/basic > /dev/null
+          curl -sf -A "curl/8 2plot-internal/probe ci-boot" http://127.0.0.1:8055/ > /dev/null
+          curl -sf -A "curl/8 2plot-internal/probe ci-boot" http://127.0.0.1:8055/basic > /dev/null
           # The battery, against the same server a satellite deploys.
           python3 scripts/network_smoke.py --base-url http://127.0.0.1:8055
 
@@ -297,7 +297,7 @@ jobs:
         run: |
           docker run -d --name docs -p 8055:8055 flexlayout-docs:ci
           for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:8055/healthz > /dev/null; then
+            if curl -sf -A "curl/8 2plot-internal/probe ci-boot" http://127.0.0.1:8055/healthz > /dev/null; then
               echo "healthy after ~$((i*2))s"
               exit 0
             fi

@@ -377,3 +377,150 @@ def test_every_battery_script_sends_the_token(script):
     assert agents, f"scripts/{script}.py declares no User-Agent constant"
     missing = [ua for ua in agents if INTERNAL_UA_TOKEN not in ua]
     assert missing == [], f"scripts/{script}.py sends untokened UAs: {missing}"
+
+
+# ------------------------------------------------ the fleet probe spelling --
+#
+# 1.6.44 item 4. Every file that fetches a host sends an ENGINE token followed
+# by PROBE_UA_SUFFIX. Suppression is still the tracker's write-time drop — the
+# suffix carries INTERNAL_UA_TOKEN — so what `/probe` adds is legibility on
+# the far side's log, not a second mechanism.
+
+
+def test_probe_ua_leads_with_the_engine_and_carries_the_token():
+    from lib.constants import PROBE_UA_SUFFIX, probe_ua
+
+    assert PROBE_UA_SUFFIX == f"{INTERNAL_UA_TOKEN}/probe"
+    ua = probe_ua("curl/8.7.1")
+    assert ua.startswith("curl/8.7.1")
+    assert ua.endswith(PROBE_UA_SUFFIX)
+    assert INTERNAL_UA_TOKEN in ua
+
+
+def test_probe_ua_refuses_an_engineless_probe():
+    """A UA carrying only the suffix is crawler-lane, whatever it meant.
+
+    That is the defect the convention exists to prevent: an engineless probe
+    silently swaps the document out from under a browser-lane assertion.
+    """
+    from dash_improve_my_llms import classify
+
+    from lib.constants import PROBE_UA_SUFFIX, probe_ua
+
+    for engine in ("", "   ", None):
+        with pytest.raises(ValueError):
+            probe_ua(engine)
+
+    bare = classify(PROBE_UA_SUFFIX)
+    lane = bare["lane"] if isinstance(bare, dict) else bare.lane
+    assert lane == "crawler", (
+        "the engineless case stopped being crawler-lane — the reason for the "
+        f"guard changed, re-read it before relaxing it (got {lane!r})"
+    )
+
+
+@pytest.mark.parametrize(
+    "engine,lane,vendor",
+    [
+        (BROWSER_UA, "browser", None),
+        (CRAWLER_UA, "crawler", "googlebot"),
+        ("curl/8.7.1", "crawler", None),
+    ],
+)
+def test_the_suffix_moves_no_lane_no_vendor(engine, lane, vendor):
+    """Lane, vendor and bot_type hold BY CONSTRUCTION — measured, not asserted.
+
+    If appending the suffix ever moves one of these three, every probe in the
+    fleet is measuring a different document than the one it was sent to check,
+    and this test is the thing that says so. Re-measured against whichever
+    package version is resolved, because a floor move is exactly what would
+    move it.
+    """
+    from dash_improve_my_llms import classify
+
+    from lib.constants import probe_ua
+
+    def read(ua):
+        r = classify(ua)
+        r = r if isinstance(r, dict) else vars(r)
+        return (r.get("lane"), r.get("bot_type"), r.get("vendor_key"))
+
+    bare = read(engine)
+    probed = read(probe_ua(engine))
+    assert bare == probed, f"the suffix moved the classification: {bare} -> {probed}"
+    assert bare[0] == lane and bare[2] == vendor, (
+        f"the ENGINE token's own classification moved: {bare}"
+    )
+
+
+def test_every_host_fetching_file_carries_the_probe_convention():
+    """Workflows and batteries, swept by name.
+
+    Non-vacuity (note 88): the sweep asserts it found files AND that each one
+    really does fetch a host, so a renamed workflow cannot turn this green by
+    sweeping nothing. Counts printed beside the result.
+
+    ADAPTED from the template's list, which also sweeps `scripts/audit_links.py`
+    and the `Dockerfile` HEALTHCHECK. Neither exists here: this fork has no
+    link auditor, and DIVERGENCES 12 records that the image carries no apt
+    layer and therefore no HEALTHCHECK. Sweeping a path that cannot exist
+    would be the vacuous-green shape this test is built to refuse.
+    """
+    from conftest import REPO_ROOT
+
+    from lib.constants import PROBE_UA_SUFFIX
+
+    targets = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    targets += [REPO_ROOT / "scripts" / f"{n}.py"
+                for n in ("network_smoke", "smoke_live")]
+    for path in targets:
+        assert path.exists(), f"swept a path that does not exist: {path}"
+    assert len(targets) >= 5, f"swept only {len(targets)} files"
+
+    fetchers, missing = [], []
+    for path in targets:
+        text = path.read_text()
+        if "curl" not in text and "urllib" not in text and "requests" not in text:
+            continue
+        fetchers.append(path.name)
+        if PROBE_UA_SUFFIX not in text:
+            missing.append(path.name)
+
+    print(f"probe sweep: {len(fetchers)} of {len(targets)} files fetch a host")
+    assert len(fetchers) >= 4, (
+        f"only {len(fetchers)} of {len(targets)} fetch a host — the sweep is "
+        "reading files that cannot carry the convention"
+    )
+    assert missing == [], f"host-fetching files with no probe UA: {missing}"
+
+
+def test_the_probe_caller_tag_never_breaks_the_token_or_the_lane():
+    """Same shape as `internal_ua()`'s caller suffix, and the same guarantee.
+
+    The tag is for reading the far side's log; the contract is the token, and
+    the lane must not move — a caller tag that reclassified would make the
+    battery measure the other document under its own name.
+    """
+    from dash_improve_my_llms import classify
+
+    from lib.constants import PROBE_UA_SUFFIX, probe_ua
+
+    tagged = probe_ua(BROWSER_UA, "network-smoke")
+    assert tagged.endswith("network-smoke")
+    assert PROBE_UA_SUFFIX in tagged and INTERNAL_UA_TOKEN in tagged
+    assert probe_ua(BROWSER_UA, "  ") == probe_ua(BROWSER_UA)
+    assert classify(tagged)["lane"] == classify(BROWSER_UA)["lane"] == "browser"
+
+
+def test_a_probe_ua_is_still_dropped_by_the_tracker(read_tracker):
+    """The suffix is legibility; the DROP is what keeps the ledger clean.
+
+    Both tables, since item 1 of 1.6.43 made the read side hold too.
+    """
+    from lib.constants import probe_ua
+
+    before = len(_read_rows(read_tracker))
+    read_tracker.record_read(_read_event(ua=probe_ua(CRAWLER_UA, "network-smoke")))
+    after = len(_read_rows(read_tracker))
+    print(f"probe-UA read: reads {before} -> {after}")
+    assert after == before
