@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
+
+import pytest
 
 from conftest import BROWSER_ACCEPT, CRAWLER_UA
 from lib import network_directory as nd
@@ -455,3 +458,60 @@ def test_nav_block_is_absent_from_the_root_index(client):
     body = client.get("/llms.txt").text
     assert "## Pages" in body, "the root document should be an index"
     assert not CHROME.search(body), "viewer chrome leaked into the root index"
+
+
+# --------------------------------------------------- healthz: llms_version --
+#
+# 1.6.44 item 1. The resolved dash-improve-my-llms version on the wire. Until
+# this landed there was no surface on this host naming it (DIVERGENCES 20).
+
+
+def test_healthz_carries_the_resolved_llms_version(client):
+    """Present, and equal to what an IMPORT reports — never a parsed floor."""
+    import dash_improve_my_llms as pkg
+
+    from lib.health import health_payload
+
+    payload = health_payload("flask")
+    assert "llms_version" in payload, (
+        "llms_version absent from health_payload — item 1 not adopted"
+    )
+    assert payload["llms_version"] == pkg.__version__
+
+    # And on the lane this host actually serves, not just in the builder.
+    body = client.get("/healthz", user_agent=CRAWLER_UA)
+    assert json.loads(body.text)["llms_version"] == pkg.__version__
+
+
+def test_the_openapi_knobs_are_filtered_to_what_the_resolved_package_accepts():
+    """The guard this fork needs and the template does not.
+
+    The three `openapi_*` knobs arrived in dimll 2.9.4. `LLMSConfig` at 2.8.0
+    raises `TypeError: unexpected keyword argument 'openapi_title'` on the
+    identical call, and this fork's floor is `>=2.8.0` deliberately (the
+    fleet pin lands at 1.6.45 as ==2.10.0). An unguarded port would take the
+    app down at IMPORT wherever the floor itself resolves — this venv, CI's
+    package leg, or any image whose dependency layer still holds 2.8.0.
+
+    Pinned in both directions so the filter cannot rot into a no-op that
+    silently drops the knobs on a version that would have taken them.
+    """
+    import inspect
+
+    from dash_improve_my_llms import LLMSConfig
+
+    accepted = inspect.signature(LLMSConfig).parameters
+    knobs = ("openapi_title", "openapi_description", "openapi_version")
+    supported = [k for k in knobs if k in accepted]
+
+    assert supported in ([], list(knobs)), (
+        f"partial openapi knob support is not a shape this guard handles: "
+        f"{supported}"
+    )
+    if supported:
+        # A version that takes them must actually receive them.
+        LLMSConfig(warn_missing_llms_doc=True, openapi_title="x",
+                   openapi_description="y", openapi_version="1.0")
+    else:
+        with pytest.raises(TypeError):
+            LLMSConfig(warn_missing_llms_doc=True, openapi_title="x")

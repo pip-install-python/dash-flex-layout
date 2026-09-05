@@ -23,6 +23,7 @@ rolling back is flipping it again, with no code revert anywhere.
 
 Run with:  python run.py   ->  http://localhost:8055
 """
+import inspect
 import os
 import sys
 
@@ -77,6 +78,7 @@ from lib.constants import (
     SAME_AS,
     SITE_BRAND,
     SITE_DESCRIPTION,
+    SITE_SHORT_NAME,
     require_owned_base_url,
 )
 from lib.health import register_health_route
@@ -437,7 +439,40 @@ ACCESS_ENABLED = _access.configure(
 # per-page <title> on the CRAWLER path; the browser path's site-level tags
 # live in templates/index.html — see the rule documented there).
 # Works on the Flask backend with no extra gating.
-add_llms_routes(app, LLMSConfig(warn_missing_llms_doc=True))
+# THE HOST OWNS ITS API IDENTITY (1.6.44 item 1, dimll 2.9.4's three
+# `openapi_*` knobs). The package cannot read `/healthz` and must not
+# guess: without these an OpenAPI document is titled "FastAPI" with
+# version "0.1.0", which is what an agent discovering a host through
+# `/openapi.json` would read as the app's name. The knobs exist so
+# identity flows one way — from this repo's constants, the same ones the
+# browser title, the og: tags and the network registry read.
+#
+# `openapi_version` is the API SURFACE's version, not the package's and
+# not this app's release: it moves when the routes change shape, so it is
+# pinned here rather than wired to a changelog. `llms_version` on
+# `/healthz` reports the resolved PACKAGE version — two different
+# questions, deliberately not the same field.
+#
+# FILTERED, not passed blind, and this fork needs the filter where the
+# template does not. The knobs arrived in 2.9.4; `LLMSConfig` at 2.8.0
+# RAISES `TypeError: unexpected keyword argument 'openapi_title'` on the
+# identical call. The template pins ==2.9.4 so it never sees that, but
+# this fork's floor is `>=2.8.0` and stays there deliberately (1.6.43
+# item 1; the fleet pin lands at 1.6.45 as ==2.10.0), so an unguarded
+# port would take the app down at IMPORT on any environment that
+# resolves the floor itself — this venv, CI's package leg, and any image
+# whose dependency layer cache still holds 2.8.0. Verified: 2.8.0
+# rejects, 2.9.4 and 2.10.0 accept.
+_openapi_knobs = {
+    "openapi_title": f"{SITE_SHORT_NAME} API",
+    "openapi_description": SITE_DESCRIPTION,
+    "openapi_version": "1.0",
+}
+_accepted = inspect.signature(LLMSConfig).parameters
+add_llms_routes(app, LLMSConfig(
+    warn_missing_llms_doc=True,
+    **{k: v for k, v in _openapi_knobs.items() if k in _accepted},
+))
 
 # The ledger row (dimll 2.8.0): the package emits one event per corpus
 # document it serves and does no I/O with it; the tracker keeps it as the

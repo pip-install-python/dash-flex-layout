@@ -55,6 +55,29 @@ def _resolved_country(headers=None) -> str:
         return "unavailable"
 
 
+def _llms_version() -> dict:
+    """``{"llms_version": "2.8.0"}``, or ``{}`` if the package cannot be read.
+
+    Omitted rather than reported as "unknown": a health payload that invents
+    a version is worse than one that is silent about it, and run.py's boot
+    floor already refuses to start below the floor — so an absent key here
+    means the import broke after boot, which is itself the finding.
+
+    This is the field that makes the fleet's "compare CI against production"
+    check possible on this host for the first time. Until it lands, the
+    resolved package version has NO wire surface here (DIVERGENCES 20), which
+    is why this fork's field-name check is a range over the whole admissible
+    floor rather than a CI-vs-production pair.
+    """
+    try:
+        import dash_improve_my_llms as _pkg
+
+        version = getattr(_pkg, "__version__", None)
+        return {"llms_version": version} if version else {}
+    except Exception:
+        return {}
+
+
 def health_payload(backend: str, headers=None) -> dict:
     payload = {
         "ok": True,
@@ -104,6 +127,11 @@ def health_payload(backend: str, headers=None) -> dict:
     from lib.constants import APP_VERSION
 
     payload["version"] = APP_VERSION
+
+    # The RESOLVED dash-improve-my-llms version (1.6.44 item 1). Additive and
+    # optional — a host whose package import broke after boot omits it rather
+    # than guessing.
+    payload.update(_llms_version())
 
     # The geo guardrail's LIVE state (dash-improve-my-llms >= 2.7.0). Added
     # after llms-2plot-dev's production verification could not answer "is
