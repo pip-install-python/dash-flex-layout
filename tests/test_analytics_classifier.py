@@ -106,3 +106,86 @@ def test_a_fresh_tracker_instance_uses_the_same_classifier():
     other = AnalyticsTracker(data_file="/tmp/does-not-matter.json")
     assert other.is_bot(GPTBOT_UA) == tracker.is_bot(GPTBOT_UA)
     assert other.detect_bot_type(GPTBOT_UA) == tracker.detect_bot_type(GPTBOT_UA)
+
+
+# --------------------------------------------- prefer, then derive (item 8) --
+
+
+def test_a_package_supplied_vendor_class_passes_through_untouched(monkeypatch):
+    """THE CONFLICTING FIXTURE. A test whose registry answer AGREES with the
+    package's cannot fail, so the two are made to disagree deliberately.
+
+    If the fork ever computes the class unconditionally, the registry's value
+    wins here and the assertion catches it.
+    """
+    import lib.analytics_tracker as mod
+
+    monkeypatch.setattr(mod, "classify", lambda ua, ip=None: {
+        "lane": "crawler", "bot_type": "training", "vendor_key": "gptbot",
+        "vendor_class": "PACKAGE_SAYS_THIS", "verified": "verified",
+    })
+    monkeypatch.setattr(mod, "_vendor_class_from_registry",
+                        lambda key: "REGISTRY_SAYS_OTHERWISE")
+
+    assert mod._classify("GPTBot/1.0")["vendor_class"] == "PACKAGE_SAYS_THIS", (
+        "the fork overwrote the package's vendor_class with its own answer"
+    )
+
+
+def test_the_registry_is_consulted_only_where_the_class_is_absent(monkeypatch):
+    """THE MIRROR. "Prefer" that never derives and "derive" that never
+    prefers both pass a one-sided test, so both directions are pinned."""
+    import lib.analytics_tracker as mod
+
+    monkeypatch.setattr(mod, "classify", lambda ua, ip=None: {
+        "lane": "crawler", "bot_type": "training", "vendor_key": "gptbot",
+        "vendor_class": None, "verified": "verified",
+    })
+    monkeypatch.setattr(mod, "_vendor_class_from_registry",
+                        lambda key: f"DERIVED:{key}")
+
+    assert mod._classify("GPTBot/1.0")["vendor_class"] == "DERIVED:gptbot", (
+        "the class was absent and the registry was not consulted"
+    )
+
+
+def test_the_registry_helper_reads_the_packages_own_registry():
+    """Never a hand-written map: `get_vendor()` reads what `classify()` reads.
+
+    Measured against the resolved package rather than asserted — this fork's
+    floor (>=2.8.0) is BELOW the 2.9.2 that puts vendor_class on the event,
+    so the derive path is the live one here, not the fallback.
+    """
+    from dash_improve_my_llms._ledger import EVENT_FIELDS
+
+    import lib.analytics_tracker as mod
+
+    if "vendor_class" in EVENT_FIELDS:
+        # 2.9.2+: the package supplies it, derivation is the fallback.
+        return
+
+    derived = mod._vendor_class_from_registry("gptbot")
+    assert derived, (
+        "on a package below 2.9.2 the registry is the ONLY source of "
+        "vendor_class, and it returned nothing for a known vendor"
+    )
+
+
+def test_an_unknown_or_missing_vendor_derives_nothing_rather_than_guessing():
+    import lib.analytics_tracker as mod
+
+    assert mod._vendor_class_from_registry(None) is None
+    assert mod._vendor_class_from_registry("") is None
+    assert mod._vendor_class_from_registry("not-a-real-vendor-xyz") is None
+
+
+def test_classification_still_survives_a_raising_package(monkeypatch):
+    """The totality guarantee must not have been lost to the new branch."""
+    import lib.analytics_tracker as mod
+
+    def boom(ua, ip=None):
+        raise RuntimeError("registry exploded")
+
+    monkeypatch.setattr(mod, "classify", boom)
+    result = mod._classify("anything")
+    assert result["lane"] == "browser" and result["verified"] == "n/a"
