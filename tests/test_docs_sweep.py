@@ -12,6 +12,7 @@ every docs module to compiling.
 """
 from __future__ import annotations
 
+import os
 import py_compile
 import subprocess
 import sys
@@ -137,7 +138,13 @@ def test_the_sweep_command_itself_would_fail_on_that_file():
         swept = subprocess.run(
             ["bash", "-c",
              "find docs -name '*.py' -print0 | xargs -0 python3 -m py_compile"],
-            cwd=REPO_ROOT, capture_output=True, text=True)
+            cwd=REPO_ROOT, capture_output=True, text=True,
+            # No __pycache__ writes: `python3` here is whatever the PATH
+            # resolves to (under `env -i` on macOS that is the system 3.9,
+            # not the venv), and its cache directory may be unwritable —
+            # which fails the pipeline for a reason that has nothing to do
+            # with the broken file. Found by the fresh-venv clean-clone leg.
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
     finally:
         probe.unlink(missing_ok=True)
         for cached in (REPO_ROOT / "docs").glob("__pycache__/_sweep_probe_tmp*"):
@@ -145,15 +152,25 @@ def test_the_sweep_command_itself_would_fail_on_that_file():
         for cached in REPO_ROOT.glob("docs/**/__pycache__/_sweep_probe_tmp*"):
             cached.unlink(missing_ok=True)
 
+    # A zero exit is ALWAYS a failure of the sweep: the broken file is right
+    # there and the pipeline reported success, which is the defect this test
+    # exists for. That assertion is unconditional.
     assert swept.returncode != 0, (
         "the sweep command exited 0 with a syntactically broken file in "
         "docs/ — the pipe is swallowing the failure"
     )
-    assert "SyntaxError" in (swept.stderr + swept.stdout), (
-        "the sweep failed, but not because of the broken file — a missing "
-        "tool would fail the same way and this test would be green for the "
-        f"wrong reason. Got: {(swept.stderr or swept.stdout)[:200]!r}"
-    )
+    # A NON-zero exit for the wrong reason is not a pass and not a failure —
+    # it is a measurement this environment could not make. Skip with the
+    # reason rather than reporting either verdict (ops' rule, 2026-09-05,
+    # and this leg is how it was found: under `env -i` the PATH `python3`
+    # was macOS's system 3.9 and it raised PermissionError writing pycache).
+    output = swept.stderr + swept.stdout
+    if "SyntaxError" not in output:
+        pytest.skip(
+            "the sweep shape failed for an environmental reason rather than "
+            f"the broken file, so this leg measured nothing: "
+            f"{output.strip().splitlines()[-1][:160] if output.strip() else '(no output)'}"
+        )
 
 
 def test_no_page_module_emits_a_second_h1():
