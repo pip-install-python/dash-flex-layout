@@ -111,6 +111,22 @@ def load_visits(path=None):
 
 
 def visitor_key(v):
+    """The session-grouping key for one visit row.
+
+    PREFERS the row's stored ``visitor_key`` (1.6.44 item 16 — a salted
+    one-way hash written at track time) and FALLS BACK to the old
+    ``ip_address|ua`` composite.
+
+    The fallback is load-bearing for exactly as long as the retention window:
+    rows written before item 16 have no ``visitor_key`` and still have an
+    ``ip_address``, and a reader that only looked for the new field would
+    collapse every one of them onto its User-Agent — turning a day of
+    distinct visitors into a handful of "sessions" and doing it silently. It
+    can be deleted once no pre-item rows remain inside the window.
+    """
+    stored = v.get("visitor_key")
+    if stored:
+        return stored
     ua = hashlib.md5((v.get("user_agent") or "?").encode()).hexdigest()[:8]
     return f"{v.get('ip_address') or '?'}|{ua}"
 

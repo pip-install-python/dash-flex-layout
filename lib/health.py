@@ -161,12 +161,22 @@ def health_payload(backend: str, headers=None) -> dict:
         pass
     else:
         try:
+            from lib.analytics_tracker import geo_headers_seen
+
             payload["geo"] = {
                 "configured": bool(geo.is_configured()),
                 "denied": len(
                     geo.effective_policy().get("deny_countries") or []
                 ),
                 "resolved": _resolved_country(headers),
+                # WHICH location headers this process has actually received
+                # (1.6.44 item 16). Since the tracker no longer looks an
+                # address up anywhere, the edge's headers are the ONLY source
+                # of location — so "is the edge attaching them on this zone?"
+                # became a question worth answering without reading a boot
+                # log. An empty list on a busy host means the transform is
+                # off, not that visitors have no country.
+                "headers_seen": geo_headers_seen(),
             }
         except Exception:  # never let a diagnostic break the health probe
             payload["geo"] = {"configured": False, "denied": 0, "error": True}

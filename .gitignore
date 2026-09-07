@@ -372,3 +372,10 @@ smoke-*.json
 visitor_analytics.json
 visitor_analytics.json.lock
 .satellite_report.lease
+
+# The visitor-key salt (1.6.44 item 16). Generated at runtime beside the
+# ledger and NEVER committed: a committed salt makes every visitor_key in
+# every checkout of this repo computable by anyone who has the repo, which
+# undoes the item entirely. Set ANALYTICS_VISITOR_SALT in the environment to
+# pin it across deploys instead.
+.visitor_salt
