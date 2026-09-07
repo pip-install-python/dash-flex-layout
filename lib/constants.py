@@ -260,6 +260,11 @@ CATEGORY_ORDER = [
     "Theming",
     "Callbacks",
     "Reference",
+    # 1.6.44 item 15. The drop says "between Components and Admin"; this fork
+    # has no Components category, so Legal goes LAST — which is the same
+    # position, since Admin is built separately by the navbar rather than
+    # from this list.
+    "Legal",
 ]
 
 # The upstream project this component wraps — rendered as the last

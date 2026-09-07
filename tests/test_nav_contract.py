@@ -213,7 +213,18 @@ def test_footer_is_the_contract(app_module):
         assert href in text
     assert GITHUB_URL not in text, "the repo link is the top bar's; the footer links the profile"
     assert "/changelog" not in text, "the sidebar's single Changelog link is the one"
-    assert "/terms" not in text and "/privacy" not in text
+    # FLIPPED BY 1.6.44 item 15, and the flip is the item landing. This
+    # assertion was CORRECT while the pages did not exist: linking /terms and
+    # /privacy from every page while nothing served them is precisely the
+    # soft-404 defect item 11 exists to catch, and Dash answers 200 for both
+    # so no crawl would ever have found it. Now that both are registered
+    # pages, the footer is the right place for them and their ABSENCE would
+    # be the defect.
+    assert "/terms" in text and "/privacy" in text, (
+        "the Legal links left the footer — either put them back or "
+        "unregister the pages; a site with a privacy page nobody can reach "
+        "from a page is not much better than one without"
+    )
 
 
 # ------------------------------------------------------- changelog --

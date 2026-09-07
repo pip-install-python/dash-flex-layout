@@ -35,7 +35,23 @@ def create_footer():
         dmc.Container(
             dmc.Group(
                 [
-                    dmc.Text(f"© {datetime.now().year} {PUBLISHER}", size="sm", c="dimmed"),
+                    dmc.Group(
+                        [
+                            dmc.Text(f"© {datetime.now().year} {PUBLISHER}",
+                                     size="sm", c="dimmed"),
+                            # The Legal section (1.6.44 item 15). Both pages
+                            # are registered Dash pages, so these are real
+                            # destinations rather than the soft 404s the item
+                            # exists to prevent — tests/test_shell_links_resolve.py
+                            # holds every internal shell href to the registry.
+                            dmc.Anchor("Terms", href="/terms", size="sm",
+                                       c="dimmed", underline="hover"),
+                            dmc.Anchor("Privacy", href="/privacy", size="sm",
+                                       c="dimmed", underline="hover"),
+                        ],
+                        gap="md",
+                        wrap="nowrap",
+                    ),
                     dmc.Group(
                         [
                             _icon_link("radix-icons:github-logo", GITHUB_PROFILE_URL, "Pip Install Python on GitHub"),
