@@ -134,6 +134,29 @@ def check(path: str) -> str:
     key = _request_key()
     if not key:
         return "gated"
+
+    # A VERIFY VERDICT IS METERING EVIDENCE, NEVER SOLE AUTHORISATION
+    # (1.6.44 item 18; the 2026-09-02 incident). THIS HOST'S OWN ADMIN DATA
+    # IS GATED BY A SECRET THIS HOST HOLDS — `ADMIN_EMAILS` / `ADMIN_USER_IDS`
+    # / `OWNER_EMAIL`, read through `auth.is_admin_user` above — and never by
+    # an answer from the hub. The incident's shape was exactly this branch:
+    # the hub's all-unknown-tier fallback answered "allow" WITHOUT READING
+    # THE KEY, and two admin-data routes were open for 24 minutes because the
+    # authority was asked a question it did not understand.
+    #
+    # "Ask the authority" is the wrong SHAPE for an admin gate whatever the
+    # authority answers: a new tier is UNVERIFIED until the hub learns it, so
+    # the failure mode of an ignorant authority has to be closed here rather
+    # than trusted there. `verify` fails closed on every path it controls
+    # (no key, not enabled, POST failure, unrecognised verdict — all
+    # "gated"), but a correct "allow" is still not enough for admin.
+    #
+    # Rejected case- and whitespace-insensitively: "Admin", " admin " and
+    # "ADMIN" are the same tier, and a lookalike that slipped through would
+    # reach the hub as an unknown tier — the incident's own trigger.
+    if (tier or "").strip().lower() == "admin":
+        return "gated"
+
     return hub_client.verify(key, path, tier)
 
 

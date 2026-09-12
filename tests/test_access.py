@@ -553,3 +553,101 @@ def test_run_py_pins_the_funnel_public(app_module):
     the regression net for those pins."""
     for path in ("/", "/getting-started", "/llms-small.txt", "/llms-full.txt"):
         assert page_tiers.local_tier(path) == "public", path
+
+
+# ------------- a verify verdict is metering evidence, never authorisation --
+#
+# 1.6.44 item 18, from the 2026-09-02 incident: the hub gated two admin-data
+# routes on its own /api/agent-key/verify, whose all-unknown-tier fallback
+# answered "allow" WITHOUT READING THE KEY. This host's admin data is gated
+# by a secret THIS host holds (ADMIN_EMAILS / ADMIN_USER_IDS / OWNER_EMAIL,
+# via auth.is_admin_user) and never by an answer from the hub.
+
+
+def test_an_allowing_hub_cannot_open_admin_to_a_key(monkeypatch):
+    """THE INCIDENT, reproduced against this tree.
+
+    The hub is made to answer "allow" to everything — which is precisely what
+    the real one did for 24 minutes — and admin must STILL be gated.
+    """
+    from lib import access, hub_client
+
+    monkeypatch.setattr(hub_client, "verify",
+                        lambda key, path, tier, **kw: "allow")
+    monkeypatch.setattr(access, "_request_key", lambda: "k2p_anything")
+    monkeypatch.setattr(access.auth, "current_user", lambda: None)
+
+    monkeypatch.setattr(access, "effective_tier", lambda p: "admin")
+    assert access.check("/admin/traffic") == "gated", (
+        "a hub verdict opened this host's admin data — the incident's shape"
+    )
+
+
+@pytest.mark.parametrize("lookalike", ["Admin", "ADMIN", " admin ", "aDmIn"])
+def test_case_and_whitespace_lookalikes_are_the_same_tier(monkeypatch, lookalike):
+    """A lookalike that slipped past the check would reach the hub as an
+    UNKNOWN tier — which is the exact input the incident's fallback
+    mishandled. Reject the tier, not one literal spelling of it."""
+    from lib import access, hub_client
+
+    monkeypatch.setattr(hub_client, "verify",
+                        lambda key, path, tier, **kw: "allow")
+    monkeypatch.setattr(access, "_request_key", lambda: "k2p_anything")
+    monkeypatch.setattr(access.auth, "current_user", lambda: None)
+
+    monkeypatch.setattr(access, "effective_tier", lambda p: lookalike)
+    assert access.check("/admin/traffic") == "gated", lookalike
+
+
+def test_the_good_rows_still_work_beside_the_bypass_rows(monkeypatch):
+    """Pin the GOOD rows too, or a gate that denies everything passes every
+    assertion above while breaking the site."""
+    from lib import access, hub_client
+
+    monkeypatch.setattr(hub_client, "verify",
+                        lambda key, path, tier, **kw: "allow")
+    monkeypatch.setattr(access, "_request_key", lambda: "k2p_anything")
+    monkeypatch.setattr(access.auth, "current_user", lambda: None)
+
+    # A non-admin tier still honours the hub's verdict — verify is metering
+    # evidence and it is still evidence.
+    monkeypatch.setattr(access, "effective_tier", lambda p: "auth")
+    monkeypatch.setattr(access, "llms_public", lambda p: False)
+    assert access.check("/basic") == "allow"
+
+
+def test_a_real_admin_session_still_gets_in(monkeypatch):
+    """The host-held authority is what grants admin, so it must still grant."""
+    from lib import access
+
+    monkeypatch.setattr(access.auth, "current_user", lambda: object())
+    monkeypatch.setattr(access, "effective_tier", lambda p: "admin")
+    monkeypatch.setattr(access.auth, "is_admin_user", lambda user=None: True)
+    assert access.check("/admin/traffic") == "allow"
+
+    monkeypatch.setattr(access.auth, "is_admin_user", lambda user=None: False)
+    assert access.check("/admin/traffic") == "gated"
+
+
+def test_the_closed_fallbacks_are_SOURCE_pinned():
+    """SOURCE-pinned, not merely exercised (item 18's note).
+
+    A behavioural suite cannot see a restored default that pre-empts its own
+    guard: if someone adds `return "allow"` above these branches, every
+    behavioural test still passes through the new line. Read the function.
+    """
+    import ast
+    import inspect
+
+    from lib import hub_client
+
+    tree = ast.parse(inspect.getsource(hub_client.verify))
+    returns = [n.value.value for n in ast.walk(tree)
+               if isinstance(n, ast.Return) and isinstance(n.value, ast.Constant)]
+    assert "allow" not in returns, (
+        "hub_client.verify now returns a bare 'allow' constant — every "
+        "closed fallback in it must yield 'gated'"
+    )
+    assert returns.count("gated") >= 4, (
+        f"expected at least four closed fallbacks, found {returns}"
+    )

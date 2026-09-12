@@ -613,3 +613,36 @@ they win.
   this repo does not have.
   The general form: when the check you ran differs from the check CI
   runs, the report says so in the same sentence as the result.
+- A VERIFY VERDICT IS METERING EVIDENCE, NEVER SOLE AUTHORISATION
+  (1.6.44 item 18; the security incident of 2026-09-02, hub
+  0.26.0 -> 0.26.1). The hub gated two admin-data routes on
+  `/api/agent-key/verify`, whose all-unknown-tier fallback
+  answered "allow" WITHOUT READING THE KEY; the lane was open
+  00:52-01:16Z. The contract: **a host's own data is gated by a
+  secret THAT HOST HOLDS.** A verify verdict may be a second
+  factor, and it is metering evidence first. A new tier is
+  UNVERIFIED until the authority learns it, so "ask the
+  authority" is the wrong SHAPE for a gate — the failure mode of
+  an unreachable or ignorant authority must be closed locally,
+  and an authority that answers "allow" to a question it did not
+  understand is worse than no authority.
+  ON THIS HOST: `lib/access.check()` had exactly that branch —
+  no session, a key present, and `hub_client.verify(key, path,
+  tier)` returned as the verdict for EVERY tier including admin.
+  Admin is now refused before the hub is asked, and the
+  host-held authority (`ADMIN_EMAILS` / `ADMIN_USER_IDS` /
+  `OWNER_EMAIL` via `auth.is_admin_user`) is the only thing that
+  grants it. The tier is rejected case- and
+  whitespace-insensitively, because a lookalike that slipped
+  through would reach the hub as an unknown tier — the
+  incident's own trigger.
+  Four habits from the same family: a test that exercises a
+  dependency's ABSENCE is not a test of that dependency's
+  policy; a fixture cannot falsify the assumption it was built
+  from; a defaulted argument hides its own default, so test the
+  branch that COMPUTES it and not only the callers that pass it;
+  and SOURCE-pin the closed fallbacks rather than only
+  exercising them — a behavioural suite cannot see a restored
+  default that pre-empts its own guard. Pin the GOOD rows beside
+  the bypass rows, or a gate that denies everything passes every
+  bypass test while breaking the site.
