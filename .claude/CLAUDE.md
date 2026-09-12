@@ -646,3 +646,28 @@ they win.
   default that pre-empts its own guard. Pin the GOOD rows beside
   the bypass rows, or a gate that denies everything passes every
   bypass test while breaking the site.
+- A PROXIED robots.txt IS NOT YOUR robots.txt (1.6.44 item 19;
+  the 2plot.dev proxy canary). An edge can inject, rewrite or
+  replace it in perfectly valid syntax, with no tell beyond a
+  comment marker — a grep for `User-agent:` sails straight past
+  it. To learn what the APP declares you must GENERATE it in
+  process from the app's own `RobotsConfig`; to learn what the
+  WORLD is told you fetch it; and when they differ, THAT is the
+  finding. `ai_bot_posture` in scripts/network_smoke.py is the
+  row. Compare BOTH directions: an edge that REMOVES this host's
+  `Allow:` rules for the AI search agents is as much a rewrite
+  as one that adds a stanza, and it is the change most likely to
+  be made on your behalf by a "security" default.
+  GENERATE FROM THIS APP'S `BASE_URL`, never from the URL the
+  battery is probing — the two differ whenever the battery is
+  pointed at a container or a peer, and generating against the
+  probe URL compares this app's config with a document written
+  for somewhere else. The row SKIPS (never passes) on three
+  conditions, each one a comparison that would otherwise be made
+  against the wrong thing: no checkout beside the script; the
+  probe URL is not BASE_URL; or the served build resolves a
+  different dash-improve-my-llms than this process does, since
+  the generator lives in that package. An `llms_version` ABSENT
+  from the wire is a THIRD state — "wire: absent", the field
+  predating the served build — and naming it as a mismatch would
+  be a red for a deploy that simply has not happened yet.

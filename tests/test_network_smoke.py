@@ -262,3 +262,100 @@ def test_link_headers_survive_folding_and_repetition(battery):
         assert rels == {"alternate", "describedby"}, f"{label}: {rels}"
         # dict semantics unchanged for every existing caller
         assert headers["link"] == values[-1]
+
+
+# ------------------------------- a proxied robots.txt is not your robots.txt --
+#
+# 1.6.44 item 19. An edge can inject, rewrite or replace robots.txt in
+# perfectly valid syntax. The row must go RED on both shapes, and SKIP — never
+# pass — when one side of the comparison cannot be built.
+
+
+def _posture_verdict(wired, monkeypatch, served_robots, **over):
+    """Run ai_bot_posture alone against a chosen robots.txt body."""
+    from lib.constants import BASE_URL
+
+    real = wired.fetch
+    healthz = over.get("healthz", '{"llms_version": "%s"}' % over.get(
+        "wire_version", __import__("dash_improve_my_llms").__version__))
+
+    def fake(url, ua=wired.UA, method="GET", **kw):
+        if url.endswith("/robots.txt"):
+            return 200, wired._Headers(__import__("email.message",
+                                                  fromlist=["Message"]).Message()), served_robots
+        if url.endswith("/healthz"):
+            return 200, wired._Headers(__import__("email.message",
+                                                  fromlist=["Message"]).Message()), healthz
+        return real(url, ua=ua, method=method, **kw)
+
+    monkeypatch.setattr(wired, "fetch", fake)
+    monkeypatch.setattr(wired, "_RESULTS", [])
+    wired.satellite_checks(BASE_URL.rstrip("/"))
+    return {n: (v, d) for n, v, d in wired._RESULTS}["ai_bot_posture"]
+
+
+def test_the_posture_row_passes_on_the_document_this_app_wrote(wired, monkeypatch):
+    """The positive control. Without it, a row that failed on everything
+    would satisfy both red tests below."""
+    from lib.robots_expected import generated_text
+
+    verdict, detail = _posture_verdict(wired, monkeypatch, generated_text())
+    assert verdict == wired.PASS, detail
+
+
+def test_an_injected_stanza_reads_RED(wired, monkeypatch):
+    from lib.robots_expected import generated_text
+
+    tampered = generated_text() + "\nUser-agent: EvilBot\nDisallow: /\n"
+    verdict, detail = _posture_verdict(wired, monkeypatch, tampered)
+    assert verdict == wired.FAIL, detail
+    assert "did not write" in detail
+
+
+def test_a_managed_marker_with_nothing_under_it_reads_RED(wired, monkeypatch):
+    """The second shape, and the quieter one: a marker changes no directive
+    at all, so a directive-only diff sails past it."""
+    from lib.robots_expected import generated_text
+
+    tampered = "# BEGIN Managed by the edge\n# END Managed\n" + generated_text()
+    verdict, detail = _posture_verdict(wired, monkeypatch, tampered)
+    assert verdict == wired.FAIL, detail
+    assert "marker" in detail
+
+
+def test_a_REMOVED_directive_reads_RED_too(wired, monkeypatch):
+    """Both directions. Dropping this host's `Allow:` rules for the AI search
+    agents is the change most likely to be made on your behalf by a
+    "security" default, and an added-only diff cannot see it."""
+    from lib.robots_expected import generated_text
+
+    lines = generated_text().splitlines()
+    tampered = "\n".join(l for l in lines if not l.lower().startswith("allow:"))
+    verdict, detail = _posture_verdict(wired, monkeypatch, tampered)
+    assert verdict == wired.FAIL, detail
+    assert "does not serve" in detail
+
+
+def test_an_absent_wire_version_SKIPS_and_names_it(wired, monkeypatch):
+    """The THIRD state. An absent llms_version is not a mismatch — it means
+    the field predates the served build."""
+    from lib.robots_expected import generated_text
+
+    verdict, detail = _posture_verdict(wired, monkeypatch, generated_text(),
+                                       healthz='{"ok": true}')
+    assert verdict == wired.SKIP, (verdict, detail)
+    assert "wire: absent" in detail
+
+
+def test_a_version_mismatch_SKIPS_and_names_BOTH_numbers(wired, monkeypatch):
+    """The generator lives in the package, so two versions may legitimately
+    produce two documents. Naming both numbers is what makes the skip
+    actionable rather than a shrug."""
+    from lib.robots_expected import generated_text
+
+    verdict, detail = _posture_verdict(wired, monkeypatch, generated_text(),
+                                       healthz='{"llms_version": "9.9.9"}')
+    assert verdict == wired.SKIP, (verdict, detail)
+    assert "9.9.9" in detail
+    import dash_improve_my_llms as pkg
+    assert pkg.__version__ in detail, "the local version is not named"

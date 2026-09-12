@@ -496,6 +496,96 @@ def satellite_checks(base: str) -> None:
                    f"{lane} lane's Link headers do not point at /llms.txt: "
                    f"{values}")
 
+    def ai_bot_posture():
+        """The SERVED robots.txt against the one this app GENERATES.
+
+        1.6.44 item 19, from the 2plot.dev proxy canary. An edge can inject,
+        rewrite or replace robots.txt in perfectly valid syntax, with no tell
+        beyond a comment marker — a grep for `User-agent:` sails straight
+        past it. To learn what the APP declares you must generate it in
+        process; to learn what the WORLD is told you fetch it; and WHEN THEY
+        DIFFER, THAT IS THE FINDING.
+
+        THREE REASONS THIS SKIPS RATHER THAN FAILS, each a comparison that
+        would otherwise be made against the wrong thing:
+
+        1. no checkout beside this script — one side cannot be generated;
+        2. the probe URL is not this app's BASE_URL — the served document
+           belongs to a different host than the config being generated;
+        3. the served build resolves a DIFFERENT dash-improve-my-llms than
+           this process does. The generator lives in that package, so two
+           versions can legitimately produce two documents; a red there
+           would name the edge for a difference the floor permits.
+           `llms_version` ABSENT from the wire is a THIRD state, named as
+           such — it means the field predates the served build, not that
+           the versions disagree.
+        """
+        status, _, served = get("/robots.txt")
+        expect(status == 200, f"/robots.txt {status}")
+
+        try:
+            from lib.constants import BASE_URL
+            from lib.robots_expected import directives, expected_directives
+        except Exception as exc:
+            skip(f"no checkout beside this script ({type(exc).__name__})")
+
+        if base.rstrip("/") != BASE_URL.rstrip("/"):
+            skip(f"probing {base} but this app generates for {BASE_URL} — "
+                 "a parity check across two hosts compares nothing")
+
+        # The version gate, with the absent case named rather than folded in.
+        try:
+            import dash_improve_my_llms as _pkg
+            local_version = getattr(_pkg, "__version__", None)
+        except Exception:
+            local_version = None
+        _hz_status, _hz_headers, hz_body = get("/healthz")
+        try:
+            served_version = json.loads(hz_body).get("llms_version")
+        except Exception:
+            served_version = None
+        if served_version is None:
+            skip("wire: absent — the served build carries no llms_version, "
+                 f"so it cannot be compared with this process's "
+                 f"{local_version or 'unknown'}; the field arrives with the "
+                 "next deploy")
+        if local_version and served_version != local_version:
+            skip(f"llms_version mismatch — wire: {served_version}, "
+                 f"here: {local_version}. The robots generator lives in that "
+                 "package, so the two may legitimately differ")
+
+        try:
+            generated = expected_directives()
+        except Exception as exc:
+            skip(f"cannot generate this app's robots.txt here "
+                 f"({type(exc).__name__})")
+
+        if not generated:
+            skip("the app generated no directives to compare against")
+
+        served_directives = directives(served)
+        expect(served_directives,
+               "the served robots.txt carries no directives at all")
+
+        # BOTH directions. An edge that REMOVES a directive is as much a
+        # rewrite as one that adds a stanza — dropping this host's `Allow:`
+        # rules for the AI search agents would be invisible to an added-only
+        # comparison, and it is the change most likely to be made on your
+        # behalf by a "security" default.
+        injected = [d for d in served_directives if d not in generated]
+        missing = [d for d in generated if d not in served_directives]
+        markers = [ln.strip() for ln in served.splitlines()
+                   if ln.strip().startswith("#")
+                   and ("BEGIN" in ln or "Managed" in ln or "END" in ln)]
+        expect(not injected and not missing and not markers,
+               "the served robots.txt is not the one this app wrote"
+               + (f" — {len(injected)} directive(s) the app did not write: "
+                  f"{injected[:3]}" if injected else "")
+               + (f" — {len(missing)} directive(s) the app wrote and the "
+                  f"edge does not serve: {missing[:3]}" if missing else "")
+               + (f" — managed-block marker(s): {markers[:2]}"
+                  if markers else ""))
+
     def directory_counts_are_derived():
         """The Network section lists exactly the peers the module names.
 
@@ -524,6 +614,7 @@ def satellite_checks(base: str) -> None:
         ("api_llms_rows_present", api_llms_rows_present),
         ("discovery_link_headers_per_lane", discovery_link_headers_per_lane),
         ("directory_counts_are_derived", directory_counts_are_derived),
+        ("ai_bot_posture", ai_bot_posture),
         ("python_matches_declared", python_matches_declared),
         ("llms_txt_identity", llms_txt_identity),
         ("llms_txt_names_the_hub", llms_txt_names_the_hub),
