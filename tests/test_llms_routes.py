@@ -588,3 +588,85 @@ def test_head_parity_here_is_flasks_doing_not_the_packages():
         "reason in DIVERGENCES 21 no longer holds"
     )
     assert head_r.get_data() == b"", "HEAD returned a body"
+
+
+# ------------------------------------------------- healthz: the ledger block --
+#
+# 1.6.44 item 20. Where the ledger lives, and whether it survives a restart —
+# measured from the filesystem rather than declared by a blueprint.
+
+
+def test_the_ledger_block_carries_its_four_keys(client):
+    from lib.health import health_payload
+
+    ledger = health_payload("flask")["ledger"]
+    assert set(ledger) == {"path", "persistent", "visits", "reads"}
+    assert isinstance(ledger["persistent"], bool)
+    assert isinstance(ledger["visits"], int) and isinstance(ledger["reads"], int)
+
+    on_the_wire = json.loads(client.get("/healthz", user_agent=CRAWLER_UA).text)
+    assert set(on_the_wire["ledger"]) == {"path", "persistent", "visits", "reads"}
+
+
+def test_persistent_flips_in_BOTH_directions(monkeypatch, tmp_path):
+    """MEASURED, never declared. A boolean that reports the deployment's
+    intention is worth nothing — leaflet ran for weeks with a declared disk
+    and no disk, and nothing on the wire could contradict the declaration.
+
+    Both directions, because a function hard-coding either answer passes a
+    one-sided test.
+    """
+    import lib.health as health
+
+    from conftest import REPO_ROOT
+
+    # Inside the repository tree -> the container filesystem.
+    inside = REPO_ROOT / "visitor_analytics.json"
+    monkeypatch.setattr("lib.analytics_tracker.analytics_path", lambda: inside)
+    assert health._ledger_block()["persistent"] is False
+
+    # Outside it -> a mounted disk.
+    outside = tmp_path / "visitor_analytics.json"
+    monkeypatch.setattr("lib.analytics_tracker.analytics_path", lambda: outside)
+    assert health._ledger_block()["persistent"] is True
+
+
+def test_a_missing_ledger_reports_zeros_and_keeps_healthz_up(monkeypatch, tmp_path):
+    """A diagnostic that can take the health probe down with it is a
+    liability."""
+    import lib.health as health
+
+    missing = tmp_path / "nope" / "visitor_analytics.json"
+    monkeypatch.setattr("lib.analytics_tracker.analytics_path", lambda: missing)
+    block = health._ledger_block()
+    assert block["visits"] == 0 and block["reads"] == 0
+    assert block["path"] == str(missing.resolve())
+
+
+def test_an_unreadable_ledger_does_not_raise(monkeypatch, tmp_path):
+    import lib.health as health
+
+    broken = tmp_path / "visitor_analytics.json"
+    broken.write_text("{not json at all")
+    monkeypatch.setattr("lib.analytics_tracker.analytics_path", lambda: broken)
+    block = health._ledger_block()
+    assert block["visits"] == 0 and block["reads"] == 0
+    assert health.health_payload("flask")["ok"] is True
+
+
+def test_the_block_reports_counts_never_row_contents(monkeypatch, tmp_path):
+    """Counts, a boolean and a path. Nothing about who visited."""
+    import lib.health as health
+
+    ledger = tmp_path / "visitor_analytics.json"
+    ledger.write_text(json.dumps({
+        "visits": [{"path": "/secret", "user_agent": "Mozilla/5.0 SECRETUA",
+                    "visitor_key": "deadbeefdeadbeef"}],
+        "reads": [],
+    }))
+    monkeypatch.setattr("lib.analytics_tracker.analytics_path", lambda: ledger)
+    block = health._ledger_block()
+    assert block["visits"] == 1
+    rendered = json.dumps(block)
+    for leak in ("SECRETUA", "deadbeefdeadbeef", "/secret"):
+        assert leak not in rendered, f"the ledger block leaked {leak}"
