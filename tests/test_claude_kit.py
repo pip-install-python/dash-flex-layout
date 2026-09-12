@@ -490,3 +490,74 @@ def test_no_trap_contradicts_the_release_branch_one():
         "the unqualified form is back — a reader meeting it first compares "
         "the wire against origin/main and reads a pending push as drift"
     )
+
+
+def test_the_promote_trap_names_the_sampler_and_its_three_guards():
+    """1.6.44 item 17. Whitespace FLATTENED — the clauses wrap in the kit,
+    and two of the fleet's five detect failures last round were
+    formatting-bound rather than casing-bound."""
+    body = " ".join((REPO / ".claude" / "CLAUDE.md").read_text().split())
+    for clause in ("eight samples at 45", "completed_at", "unreadable"):
+        assert clause in body, f"missing from the promote trap: {clause}"
+
+    # AMENDED, not appended: the un-amended form must be gone, or a reader
+    # meets the old advice first (the clerkhook lesson, applied again).
+    assert "leaflet measured build+swap at 2m03s" not in body, (
+        "the original trap text is still here — item 17 amends in place"
+    )
+
+
+def test_the_sampler_exists_and_refuses_an_unobserved_bracket():
+    """The script, and the property that makes it evidence rather than a
+    number: it must decline to report a bracket it did not see."""
+    import sys
+
+    sampler = REPO / "scripts" / "promote_sampler.py"
+    assert sampler.exists()
+
+    sys.path.insert(0, str(REPO / "scripts"))
+    import promote_sampler as ps
+
+    # A lone NEW sample cannot say what it followed.
+    assert ps.consecutive_bad_reads([ps.UNREADABLE, ps.UNREADABLE]) == 2
+    assert ps.consecutive_bad_reads([ps.UNREADABLE, ps.OLD, ps.UNREADABLE]) == 1
+
+    # unreadable is DISTINCT from old, which is the whole point of (b).
+    assert ps.classify(None, "abc123") == ps.UNREADABLE
+    assert ps.classify("def456789012", "abc123") == ps.OLD
+    assert ps.classify("abc123456789", "abc123") == ps.NEW
+
+
+def test_the_sampler_refuses_a_verdict_under_the_gap_threshold():
+    """This host's own 2026-09-04 promote is the fixture: a 138 s gap, which
+    is inside the build+swap time, so no verdict was possible from it."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "scripts"))
+    import promote_sampler as ps
+
+    seconds, message = ps.gap_verdict("2026-09-04T21:42:55Z",
+                                      "2026-09-04T21:45:13Z")
+    assert round(seconds) == 138
+    assert "NO VERDICT POSSIBLE" in message
+
+    wide, message = ps.gap_verdict("2026-09-04T21:40:00Z",
+                                   "2026-09-04T21:50:00Z")
+    assert wide == 600 and "wide enough for a verdict" in message
+
+    # A missing stamp is not a verdict either.
+    none_seconds, message = ps.gap_verdict("", "")
+    assert none_seconds is None and "not given" in message
+
+
+def test_the_sampler_targets_this_host():
+    import sys
+
+    sys.path.insert(0, str(REPO / "scripts"))
+    import promote_sampler as ps
+
+    from lib.constants import BASE_URL
+
+    assert ps.DEFAULT_URL == f"{BASE_URL}/healthz", (
+        f"the sampler points at {ps.DEFAULT_URL}, not this host"
+    )

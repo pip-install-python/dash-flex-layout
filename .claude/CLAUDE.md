@@ -433,15 +433,33 @@ they win.
 - WHICH BRANCH RENDER BUILDS CAN BE MEASURED ON A GREEN PUSH,
   BY TIMING — strong evidence, not proof (leaflet). `main ==
   release == wire` at every step of a promote tells you
-  nothing. Sample `/healthz` every ~45 s from the push and time
-  the swap against the **promote**, not the push: leaflet
-  measured build+swap at 2m03s from its promote; had Render
-  reacted to the push, that same interval would have put the
-  build live ~1m52s before it appeared. The canonical
-  discriminator is still the first push that goes RED on main
-  with `release` unmoved and the wire unchanged. Four hosts
-  correctly declined to call their `deploy:` fence row proven
-  on a green push; that refusal is the standard.
+  nothing. Use `scripts/promote_sampler.py`, which takes
+  **eight samples at 45** s on ONE timeline; do not hand-write
+  the watcher. Three things it does that a hand-written loop
+  gets wrong:
+  (a) it times the swap against the PROMOTE STEP's
+  `completed_at`, never the deploy JOB's — the job CONTAINS the
+  build-match wait, so it completes when the wait SEES the
+  swap and tracks the swap rather than the promote;
+  (b) it retries each sample and records `unreadable` as a
+  state DISTINCT from `old`, because the container restart lands
+  exactly where the bracket needs its sample, and collapsing the
+  two invents a bracket nobody observed;
+  (c) it REFUSES a verdict when the push -> promote gap is under
+  180 s, since below that a push-watching and a promote-watching
+  Render predict the same wire.
+  MEASURED ON THIS HOST 2026-09-04, and it is a cautionary
+  example rather than a result: promote-observed 21:45:13Z ->
+  live-observed 21:47:25Z reads as 131 s and is not, because the
+  next sample arrived 132 s late when a `git ls-remote` in the
+  loop hung — the true interval is only bounded to (0, 177] s.
+  The gap that day was 138 s, so NO VERDICT WAS POSSIBLE from it
+  whatever the bracket had looked like. This host's `deploy:`
+  fence row is therefore UNPROVEN. The canonical discriminator
+  is still the first push that goes RED on main with `release`
+  unmoved and the wire unchanged; four hosts correctly declined
+  to call that row proven on a green push, and that refusal is
+  the standard.
 - VERIFY THE ARTIFACT THE CLAIM IS ABOUT, AND SAY WHICH ONE.
   It runs both ways. A props table absent from the crawler
   document is a defect of the SITE, not of the harness —
