@@ -522,7 +522,8 @@ class AnalyticsTracker:
 
             data["visits"] = _prune(visits)
             read_rows.extend(reads)
-            data["reads"] = _prune(read_rows, stamp=_read_stamp)
+            # cap=False: reads are pruned by AGE only (item 21).
+            data["reads"] = _prune(read_rows, stamp=_read_stamp, cap=False)
 
             # Atomic replace: a crash mid-write can't leave a truncated ledger.
             tmp = path.with_suffix(path.suffix + ".tmp")
@@ -551,12 +552,29 @@ def _read_stamp(r):
         return ""
 
 
-def _prune(rows, stamp=_visit_stamp):
-    """Drop rows older than the retention window, then cap the total."""
+def _prune(rows, stamp=_visit_stamp, cap=True):
+    """Drop rows older than the retention window, then optionally cap.
+
+    ``cap`` is the whole of 1.6.44 item 21. The retention window applies to
+    both tables; the COUNT cap applies to ``visits`` only.
+
+    Why the tables differ: a visit row is one page view and the cap is a
+    size guard on a file that grows with traffic. A READ row is one corpus
+    document served to one agent, and the read table is the evidence for
+    "which vendors actually fetched these docs" — a busy crawl day can put
+    thousands of rows in it legitimately, and capping by count silently
+    discards the OLDEST rows inside the retention window, which is exactly
+    the evidence somebody went looking for. Losing them is not a smaller
+    version of the answer, it is a different answer.
+
+    The choice of rule per table lives AT THE CALL SITE, which is why
+    tests/test_read_ledger.py source-pins it by AST: a behavioural test
+    cannot see a `cap=True` restored above it.
+    """
     if RETENTION_DAYS > 0:
         cutoff = (datetime.now() - timedelta(days=RETENTION_DAYS)).isoformat()
         rows = [v for v in rows if stamp(v) >= cutoff]
-    if MAX_VISITS > 0 and len(rows) > MAX_VISITS:
+    if cap and MAX_VISITS > 0 and len(rows) > MAX_VISITS:
         rows = rows[-MAX_VISITS:]
     return rows
 
