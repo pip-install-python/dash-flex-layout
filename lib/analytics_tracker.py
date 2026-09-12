@@ -111,6 +111,39 @@ def analytics_path() -> Path:
                 or _REPO_ROOT / "visitor_analytics.json")
 
 
+def _warn_if_ledger_is_not_persistent() -> None:
+    """Say once, at boot, when the ledger is on the container filesystem.
+
+    Mirrors ``lib/page_visibility``'s ``[visibility]`` line deliberately: an
+    operator greps ONE deploy log for one bracket, and a second convention
+    would mean they have to know both.
+
+    A `print` at import time, not a logger call — this runs before logging
+    is configured, and the point is the deploy log rather than a handler.
+    (That is also why the test boots a subprocess: `caplog` cannot see an
+    import-time print, so a caplog test here would pass on a module that
+    said nothing at all.)
+
+    PAIRS WITH ITEM 20: the guard says it ONCE at boot, `/healthz`'s
+    `ledger.persistent` says it CONTINUOUSLY. The two read the same
+    filesystem, so they must agree — and `tests/test_boot_guard.py` asserts
+    they do rather than pinning either value on its own.
+    """
+    if os.environ.get("TRAFFIC_ANALYTICS_FILE"):
+        return
+    print(
+        "[analytics] WARNING: TRAFFIC_ANALYTICS_FILE unset — the visitor "
+        "ledger is writing to the app directory and will NOT survive a "
+        "redeploy, and the visitor-key salt beside it rotates with it. Set "
+        "TRAFFIC_ANALYTICS_FILE=/var/data/visitor_analytics.json on the "
+        "service (render.yaml declares the disk, but only a Blueprint sync "
+        "or a dashboard add makes it live)."
+    )
+
+
+_warn_if_ledger_is_not_persistent()
+
+
 def _lower_headers(headers) -> dict:
     """Normalise any header mapping (Flask, Starlette, dict) to lowercase."""
     if not headers:
