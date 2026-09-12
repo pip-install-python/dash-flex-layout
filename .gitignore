@@ -327,6 +327,11 @@ KICKOFF-*.md
 !.claude/CLAUDE.md
 !.claude/settings.json
 !.claude/skills/
+# The launch name (1.6.44 item 23b). `.claude/*` is an allow-list, so a file
+# added under it is invisible in a fresh checkout unless it is named here —
+# it would pass every test run from the working directory and be absent for
+# everyone else.
+!.claude/session-name
 
 # R package artifacts
 .Rhistory

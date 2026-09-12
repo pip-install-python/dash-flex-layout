@@ -561,3 +561,82 @@ def test_the_sampler_targets_this_host():
     assert ps.DEFAULT_URL == f"{BASE_URL}/healthz", (
         f"the sampler points at {ps.DEFAULT_URL}, not this host"
     )
+
+
+def test_the_session_name_is_this_forks_app_key(app_module):
+    """1.6.44 item 23(b). A single trimmed token, equal to healthz's `app`.
+
+    The VALUE is per-fork — a byte-copy from the template would start every
+    session in the fleet under the template's address, which is why the
+    spec's sync-verbatim block is empty for this file.
+    """
+    path = REPO / ".claude" / "session-name"
+    assert path.exists(), ".claude/session-name is missing"
+
+    raw = path.read_text()
+    name = raw.strip()
+    assert name, "session-name is empty"
+    assert name == raw.strip("\n").strip(), "session-name has stray whitespace"
+    assert len(name.split()) == 1, f"session-name is not one token: {name!r}"
+
+    # `app_module` is required: run.py sets SATELLITE_APP_KEY at its fork
+    # point via os.environ.setdefault, so a bare process reports "unknown"
+    # and the comparison would be against a default rather than this host's
+    # identity.
+    from lib.health import health_payload
+
+    served = health_payload("flask")["app"]
+    assert served != "unknown", (
+        "SATELLITE_APP_KEY is unset in this process — the comparison would "
+        "pass against a default rather than this host's identity"
+    )
+    assert name == served, (
+        f"session-name is {name!r} but /healthz reports {served!r}"
+    )
+
+
+def test_the_session_name_survives_a_fresh_checkout():
+    """THE PROOF 23(b) ASKS FOR, and it cannot be made from the working tree.
+
+    `.gitignore` allow-lists `.claude/*`, so a file added under it is
+    IGNORED by default: it passes every test run from the working directory
+    and is absent for everyone else. The only way to see that is to read the
+    file out of a clone — so this reads it from git's index, which is what a
+    fresh checkout materialises.
+    """
+    import subprocess
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", ".claude/session-name"],
+        cwd=REPO, capture_output=True, text=True)
+    assert tracked.returncode == 0, (
+        ".claude/session-name is NOT tracked — it exists here and would be "
+        "absent in a fresh checkout, which is exactly the defect item 23(b) "
+        "describes"
+    )
+
+    from_index = subprocess.run(
+        ["git", "show", ":.claude/session-name"],
+        cwd=REPO, capture_output=True, text=True)
+    assert from_index.returncode == 0, from_index.stderr
+    assert from_index.stdout.strip() == (REPO / ".claude" / "session-name").read_text().strip()
+
+
+def test_the_standing_build_word_is_ABSENT_and_that_is_the_owners_call():
+    """1.6.44 item 23(a) — DECLINED BY THE OWNER in this seat's terminal.
+
+    The clause would pre-authorise building on a peer session's word without
+    the owner's. The spec itself calls it the owner's gate and says a peer's
+    assurance is not the owner's word; the owner was asked directly and said
+    no, while approving the drop's six other kit items.
+
+    Pinned as ABSENT so a later sync cannot restore it quietly. If the owner
+    changes their mind, they change this test in the same commit — which is
+    the point: the decision becomes visible either way.
+    """
+    body = " ".join((REPO / ".claude" / "CLAUDE.md").read_text().split())
+    assert "Build on ops' drops" not in body, (
+        "the standing build word is in the kit. The owner declined 23(a) on "
+        "2026-09-05; if that changed, update this test deliberately rather "
+        "than deleting it"
+    )
