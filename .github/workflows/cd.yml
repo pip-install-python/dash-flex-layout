@@ -66,7 +66,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # FULL history, not the default depth-1 shallow clone. A shallow
           # HEAD pushed onto an EXISTING `release` is rejected as
@@ -166,8 +166,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           # Site lane — tracks the Dockerfile's FROM minor, same as ci.yml's
           # site-tests job (SYNC-1.6.22-1.6.29 item 5).
